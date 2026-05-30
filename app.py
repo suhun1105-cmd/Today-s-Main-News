@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
-from flask import Flask, render_template, jsonify, send_file, redirect
+from flask import Flask, render_template, jsonify, send_file, redirect, request
 from apscheduler.schedulers.background import BackgroundScheduler
 
 load_dotenv()
@@ -18,7 +18,6 @@ REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 KST = ZoneInfo("Asia/Seoul")
 app = Flask(__name__, template_folder="templates")
 
-# 분석 상태 공유 객체
 _state = {
     "running": False,
     "step": "",
@@ -37,18 +36,30 @@ def _latest_report_path() -> Path | None:
     return reports[0] if reports else None
 
 
+def _is_fresh_report(path: Path) -> bool:
+    """현재 시각 기준 가장 최근 스케줄(10시/18시) 이후에 생성된 리포트인지 확인"""
+    now = datetime.now(tz=KST)
+    mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=KST)
+
+    if mtime.date() != now.date():
+        return False
+    if now.hour >= 18:
+        return mtime.hour >= 18
+    if now.hour >= 10:
+        return mtime.hour >= 10
+    return False
+
+
 def _run_pipeline():
     global _state
     try:
         with _lock:
             _state.update({"running": True, "error": None, "steps_done": 0})
 
-        # Step 1 — 뉴스 수집
         with _lock: _state["step"] = "뉴스 수집 중..."
         category_data = collect_all()
         with _lock: _state["steps_done"] = 1
 
-        # Step 2 — 기사별 AI 분석 (카테고리 순차, 기사 병렬)
         total_cats = len([c for c in category_data if c["articles"]])
         done_cats = 0
         for cat in category_data:
@@ -62,7 +73,7 @@ def _run_pipeline():
             def _safe_analyze(idx, art, cat_name):
                 try:
                     results[idx] = analyze_article(cat_name, art)
-                except Exception as e:
+                except Exception:
                     results[idx] = {"title": art["title"], "summary": "", "explanation": ""}
 
             threads = [
@@ -70,16 +81,13 @@ def _run_pipeline():
                 for i, art in enumerate(cat["articles"])
             ]
             for t in threads: t.start()
-            for t in threads: t.join(timeout=90)  # 기사당 최대 90초
-
+            for t in threads: t.join(timeout=90)
             for i, article in enumerate(cat["articles"]):
                 article["analysis"] = results.get(i, {})
-
             done_cats += 1
 
         with _lock: _state["steps_done"] = 2
 
-        # Step 3 — 트렌드 분석
         with _lock: _state["step"] = "트렌드 분석 중..."
         try:
             trends = analyze_trends(category_data)
@@ -87,7 +95,6 @@ def _run_pipeline():
             trends = "트렌드 분석을 불러오지 못했습니다."
         with _lock: _state["steps_done"] = 3
 
-        # Step 4 — 저장
         with _lock: _state["step"] = "리포트 저장 중..."
         html_path = html_reporter.generate(category_data, trends, REPORTS_DIR)
         md_reporter.generate(category_data, trends, REPORTS_DIR)
@@ -104,11 +111,28 @@ def _run_pipeline():
             _state["error"] = str(e)
 
 
+def _scheduled_run():
+    with _lock:
+        if _state["running"]:
+            return
+    path = _latest_report_path()
+    if path and _is_fresh_report(path):
+        return
+    t = threading.Thread(target=_run_pipeline, daemon=True)
+    t.start()
+
+
+# 매일 오전 10시, 오후 6시 (KST) 자동 실행
+scheduler = BackgroundScheduler(timezone=KST)
+scheduler.add_job(_scheduled_run, "cron", hour=10, minute=0)
+scheduler.add_job(_scheduled_run, "cron", hour=18, minute=0)
+scheduler.start()
+
+
 # ── 라우트 ─────────────────────────────────
 
 @app.route("/debug")
 def debug():
-    from flask import jsonify
     return jsonify({
         "REPORTS_DIR": str(REPORTS_DIR),
         "exists": REPORTS_DIR.exists(),
@@ -117,29 +141,19 @@ def debug():
     })
 
 
-def _is_today_report(path: Path) -> bool:
-    """리포트가 오늘(KST) 생성됐는지 확인"""
-    mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=KST)
-    return mtime.date() == datetime.now(tz=KST).date()
-
-
 @app.route("/")
 def index():
     report_path = _latest_report_path()
+    force = request.args.get("force")
 
-    # 오늘 리포트가 이미 있고 분석 중이 아니면 바로 리포트로 이동
-    from flask import request as freq
-    force = freq.args.get("force")
-    if report_path and _is_today_report(report_path) and not _state["running"] and not force:
+    if report_path and _is_fresh_report(report_path) and not _state["running"] and not force:
         return redirect("/report")
 
     report_date = None
     if report_path:
         mtime = report_path.stat().st_mtime
         report_date = datetime.fromtimestamp(mtime).strftime("%Y년 %m월 %d일 %H:%M")
-    return render_template("home.html",
-                           report_date=report_date,
-                           state=_state)
+    return render_template("home.html", report_date=report_date, state=_state)
 
 
 @app.route("/analyze", methods=["POST"])
@@ -168,37 +182,15 @@ def report():
 
 @app.route("/trigger")
 def trigger():
-    """UptimeRobot / cron-job.org 등 외부 서비스에서 호출하는 자동 실행 엔드포인트"""
     with _lock:
         if _state["running"]:
             return jsonify({"ok": False, "msg": "already running"})
-
-    # 오늘 이미 생성된 리포트가 있으면 스킵
     path = _latest_report_path()
-    if path and _is_today_report(path):
-        return jsonify({"ok": False, "msg": "today report already exists"})
-
+    if path and _is_fresh_report(path):
+        return jsonify({"ok": False, "msg": "fresh report already exists"})
     t = threading.Thread(target=_run_pipeline, daemon=True)
     t.start()
     return jsonify({"ok": True, "msg": "pipeline started"})
-
-
-def _scheduled_run():
-    """APScheduler가 오전 10시(KST)에 호출"""
-    with _lock:
-        if _state["running"]:
-            return
-    path = _latest_report_path()
-    if path and _is_today_report(path):
-        return
-    t = threading.Thread(target=_run_pipeline, daemon=True)
-    t.start()
-
-
-# ── 스케줄러 (매일 오전 10시 KST) ──────────────
-scheduler = BackgroundScheduler(timezone=KST)
-scheduler.add_job(_scheduled_run, "cron", hour=10, minute=0)
-scheduler.start()
 
 
 if __name__ == "__main__":
