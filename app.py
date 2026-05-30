@@ -40,38 +40,51 @@ def _run_pipeline():
         with _lock:
             _state.update({"running": True, "error": None, "steps_done": 0})
 
-        # Step 1
+        # Step 1 — 뉴스 수집
         with _lock: _state["step"] = "뉴스 수집 중..."
         category_data = collect_all()
         with _lock: _state["steps_done"] = 1
 
-        # Step 2
-        with _lock: _state["step"] = "기사 AI 분석 중..."
+        # Step 2 — 기사별 AI 분석 (카테고리 순차, 기사 병렬)
+        total_cats = len([c for c in category_data if c["articles"]])
+        done_cats = 0
         for cat in category_data:
             if not cat["articles"]:
                 continue
-            with threading.Lock():
-                pass
+            with _lock:
+                _state["step"] = f"AI 분석 중... ({done_cats + 1}/{total_cats}) {cat['name']}"
+
             results = {}
-            threads = []
-            for i, art in enumerate(cat["articles"]):
-                def _job(idx=i, a=art, c=cat):
-                    results[idx] = analyze_article(c["name"], a)
-                t = threading.Thread(target=_job)
-                threads.append(t)
-                t.start()
-            for t in threads:
-                t.join()
+
+            def _safe_analyze(idx, art, cat_name):
+                try:
+                    results[idx] = analyze_article(cat_name, art)
+                except Exception as e:
+                    results[idx] = {"title": art["title"], "summary": "", "explanation": ""}
+
+            threads = [
+                threading.Thread(target=_safe_analyze, args=(i, art, cat["name"]))
+                for i, art in enumerate(cat["articles"])
+            ]
+            for t in threads: t.start()
+            for t in threads: t.join(timeout=90)  # 기사당 최대 90초
+
             for i, article in enumerate(cat["articles"]):
                 article["analysis"] = results.get(i, {})
+
+            done_cats += 1
+
         with _lock: _state["steps_done"] = 2
 
-        # Step 3
+        # Step 3 — 트렌드 분석
         with _lock: _state["step"] = "트렌드 분석 중..."
-        trends = analyze_trends(category_data)
+        try:
+            trends = analyze_trends(category_data)
+        except Exception:
+            trends = "트렌드 분석을 불러오지 못했습니다."
         with _lock: _state["steps_done"] = 3
 
-        # Step 4
+        # Step 4 — 저장
         with _lock: _state["step"] = "리포트 저장 중..."
         html_path = html_reporter.generate(category_data, trends, REPORTS_DIR)
         md_reporter.generate(category_data, trends, REPORTS_DIR)

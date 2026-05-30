@@ -3,7 +3,7 @@ import json
 import anthropic
 from config import CLAUDE_MODEL
 
-_client = anthropic.Anthropic()
+_client = anthropic.Anthropic(timeout=60.0)  # 60초 타임아웃
 
 _SYSTEM_JSON = (
     "당신은 뉴스 해설 전문가입니다. "
