@@ -286,6 +286,8 @@
 
 <script>
   let polling = null;
+  let startTime = null;
+  const TIMEOUT_MS = 5 * 60 * 1000; // 5분 타임아웃
 
   async function startAnalysis() {
     const btn = document.getElementById('runBtn');
@@ -293,31 +295,46 @@
     document.getElementById('btnText').textContent = '분석 중...';
     document.getElementById('progressBox').classList.add('visible');
     document.getElementById('errorBox').classList.remove('visible');
-    document.getElementById('doneBox').classList.remove('visible');
+    startTime = Date.now();
 
-    const res = await fetch('/analyze', { method: 'POST' });
-    const data = await res.json();
-    if (!data.ok) {
-      showError(data.msg);
-      return;
+    try {
+      const res = await fetch('/analyze', { method: 'POST' });
+      const data = await res.json();
+      if (!data.ok) { showError(data.msg); return; }
+    } catch(e) {
+      showError('서버 연결 실패. 잠시 후 다시 시도해주세요.'); return;
     }
-    polling = setInterval(pollStatus, 1500);
+
+    polling = setInterval(pollStatus, 2000);
   }
 
   async function pollStatus() {
+    // 5분 초과 시 타임아웃
+    if (Date.now() - startTime > TIMEOUT_MS) {
+      clearInterval(polling);
+      showError('분석 시간이 초과됐습니다. 다시 시도해주세요.');
+      resetBtn();
+      return;
+    }
+
     try {
-      const res = await fetch('/status');
+      const res = await fetch('/status?t=' + Date.now()); // 캐시 방지
       const s = await res.json();
       updateUI(s);
-    } catch(e) {}
+    } catch(e) {
+      // 일시적 네트워크 오류는 무시하고 계속 시도
+    }
   }
 
   function updateUI(s) {
     const pct = (s.steps_done / s.steps_total) * 100;
     document.getElementById('progressBar').style.width = pct + '%';
-    document.getElementById('stepLabel').textContent = s.step || '진행 중...';
 
-    // 각 단계 done 표시
+    // 경과 시간 표시
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    const stepText = s.step || '진행 중...';
+    document.getElementById('stepLabel').textContent = stepText + ` (${elapsed}초)`;
+
     for (let i = 1; i <= 4; i++) {
       const el = document.getElementById('s' + i);
       if (s.steps_done >= i) el.classList.add('done');
@@ -331,12 +348,17 @@
     } else if (!s.running && s.steps_done === 4) {
       clearInterval(polling);
       window.location.href = '/report';
+    } else if (!s.running && s.steps_done === 0 && elapsed > 10) {
+      // 서버 재시작으로 상태 초기화된 경우
+      clearInterval(polling);
+      showError('서버가 재시작됐습니다. 다시 시도해주세요.');
+      resetBtn();
     }
   }
 
   function showError(msg) {
     const box = document.getElementById('errorBox');
-    box.textContent = '⚠️ 오류: ' + msg;
+    box.textContent = '⚠️ ' + msg;
     box.classList.add('visible');
     document.getElementById('progressBox').classList.remove('visible');
   }
