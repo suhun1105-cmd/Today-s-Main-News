@@ -1,4 +1,7 @@
 import sys
+import os
+import json
+import base64
 import threading
 from pathlib import Path
 from datetime import datetime
@@ -15,8 +18,61 @@ from analyzers.claude_analyzer import analyze_article, analyze_trends
 from reporters import html_reporter, md_reporter
 
 REPORTS_DIR = Path(__file__).resolve().parent / "reports"
+SUBS_FILE = Path(__file__).resolve().parent / "subscriptions.json"
 KST = ZoneInfo("Asia/Seoul")
 app = Flask(__name__, template_folder="templates")
+
+# ── 푸시 구독 관리 ──────────────────────────
+_subscriptions: list[dict] = []
+
+def _load_subs():
+    global _subscriptions
+    if SUBS_FILE.exists():
+        try:
+            _subscriptions = json.loads(SUBS_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            _subscriptions = []
+
+def _save_subs():
+    try:
+        SUBS_FILE.write_text(json.dumps(_subscriptions), encoding="utf-8")
+    except Exception:
+        pass
+
+_load_subs()
+
+
+def _send_push(title: str, body: str):
+    """모든 구독자에게 푸시 알림 전송"""
+    from pywebpush import webpush, WebPushException
+
+    priv_b64 = os.environ.get("VAPID_PRIVATE_KEY_B64", "")
+    if not priv_b64 or not _subscriptions:
+        return
+
+    priv_pem = base64.b64decode(priv_b64).decode("utf-8")
+    payload = json.dumps({"title": title, "body": body})
+    expired = []
+
+    for sub in list(_subscriptions):
+        try:
+            webpush(
+                subscription_info=sub,
+                data=payload,
+                vapid_private_key=priv_pem,
+                vapid_claims={"sub": "mailto:news@example.com"},
+            )
+        except WebPushException as e:
+            if e.response and e.response.status_code in (404, 410):
+                expired.append(sub)
+        except Exception:
+            pass
+
+    for sub in expired:
+        if sub in _subscriptions:
+            _subscriptions.remove(sub)
+    if expired:
+        _save_subs()
 
 _state = {
     "running": False,
@@ -104,6 +160,10 @@ def _run_pipeline():
             _state["last_report"] = str(html_path)
             _state["running"] = False
 
+        # 푸시 알림 전송
+        now_str = datetime.now(tz=KST).strftime("%m월 %d일 %H시")
+        _send_push("📰 오늘의 뉴스 리포트 준비됐습니다", f"{now_str} 기준 뉴스 분석이 완료됐습니다. 탭해서 확인하세요.")
+
     except Exception as e:
         with _lock:
             _state["running"] = False
@@ -178,6 +238,32 @@ def report():
     if not path:
         return redirect("/")
     return send_file(path)
+
+
+@app.route("/vapid-public-key")
+def vapid_public_key():
+    return jsonify({"key": os.environ.get("VAPID_PUBLIC_KEY", "")})
+
+
+@app.route("/subscribe", methods=["POST"])
+def subscribe():
+    sub = request.get_json()
+    if not sub or "endpoint" not in sub:
+        return jsonify({"ok": False}), 400
+    # 중복 제거
+    if not any(s.get("endpoint") == sub["endpoint"] for s in _subscriptions):
+        _subscriptions.append(sub)
+        _save_subs()
+    return jsonify({"ok": True})
+
+
+@app.route("/unsubscribe", methods=["POST"])
+def unsubscribe():
+    endpoint = (request.get_json() or {}).get("endpoint")
+    global _subscriptions
+    _subscriptions = [s for s in _subscriptions if s.get("endpoint") != endpoint]
+    _save_subs()
+    return jsonify({"ok": True})
 
 
 @app.route("/trigger")
