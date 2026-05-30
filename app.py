@@ -2,8 +2,10 @@ import sys
 import threading
 from pathlib import Path
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from flask import Flask, render_template, jsonify, send_file, redirect
+from apscheduler.schedulers.background import BackgroundScheduler
 
 load_dotenv()
 sys.path.insert(0, str(Path(__file__).parent))
@@ -13,6 +15,7 @@ from analyzers.claude_analyzer import analyze_article, analyze_trends
 from reporters import html_reporter, md_reporter
 
 REPORTS_DIR = Path(__file__).resolve().parent / "reports"
+KST = ZoneInfo("Asia/Seoul")
 app = Flask(__name__, template_folder="templates")
 
 # 분석 상태 공유 객체
@@ -114,9 +117,22 @@ def debug():
     })
 
 
+def _is_today_report(path: Path) -> bool:
+    """리포트가 오늘(KST) 생성됐는지 확인"""
+    mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=KST)
+    return mtime.date() == datetime.now(tz=KST).date()
+
+
 @app.route("/")
 def index():
     report_path = _latest_report_path()
+
+    # 오늘 리포트가 이미 있고 분석 중이 아니면 바로 리포트로 이동
+    from flask import request as freq
+    force = freq.args.get("force")
+    if report_path and _is_today_report(report_path) and not _state["running"] and not force:
+        return redirect("/report")
+
     report_date = None
     if report_path:
         mtime = report_path.stat().st_mtime
@@ -148,6 +164,41 @@ def report():
     if not path:
         return redirect("/")
     return send_file(path)
+
+
+@app.route("/trigger")
+def trigger():
+    """UptimeRobot / cron-job.org 등 외부 서비스에서 호출하는 자동 실행 엔드포인트"""
+    with _lock:
+        if _state["running"]:
+            return jsonify({"ok": False, "msg": "already running"})
+
+    # 오늘 이미 생성된 리포트가 있으면 스킵
+    path = _latest_report_path()
+    if path and _is_today_report(path):
+        return jsonify({"ok": False, "msg": "today report already exists"})
+
+    t = threading.Thread(target=_run_pipeline, daemon=True)
+    t.start()
+    return jsonify({"ok": True, "msg": "pipeline started"})
+
+
+def _scheduled_run():
+    """APScheduler가 오전 10시(KST)에 호출"""
+    with _lock:
+        if _state["running"]:
+            return
+    path = _latest_report_path()
+    if path and _is_today_report(path):
+        return
+    t = threading.Thread(target=_run_pipeline, daemon=True)
+    t.start()
+
+
+# ── 스케줄러 (매일 오전 10시 KST) ──────────────
+scheduler = BackgroundScheduler(timezone=KST)
+scheduler.add_job(_scheduled_run, "cron", hour=10, minute=0)
+scheduler.start()
 
 
 if __name__ == "__main__":
