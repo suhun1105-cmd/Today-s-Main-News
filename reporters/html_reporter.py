@@ -9,7 +9,7 @@ def generate(category_data: list[dict], trends: str, output_dir: Path) -> Path:
     template = env.get_template("report.html")
 
     html = template.render(
-        generated_at=datetime.now().strftime("%Y년 %m월 %d일 %H:%M"),
+        generated_at=datetime.now().strftime("%Y년 %m월 %d일"),
         trends=trends,
         categories=category_data,
     )
