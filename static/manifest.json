@@ -1,6 +1,6 @@
 {
   "name": "Today's Main News",
-  "short_name": "뉴스 다이제스트",
+  "short_name": "News",
   "description": "AI가 분석하는 오늘의 주요 뉴스",
   "start_url": "/",
   "display": "standalone",
