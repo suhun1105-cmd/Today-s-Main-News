@@ -14,7 +14,7 @@ from flask import Flask, jsonify, redirect, render_template, request, send_file
 load_dotenv()
 sys.path.insert(0, str(Path(__file__).parent))
 
-from analyzers.claude_analyzer import analyze_article, analyze_trends
+from analyzers.claude_analyzer import analyze_report
 from collectors.naver_collector import collect_all
 from reporters import html_reporter, md_reporter
 
@@ -128,47 +128,42 @@ def _run_pipeline() -> None:
         with _lock:
             _state["steps_done"] = 1
 
-        categories_with_articles = [cat for cat in category_data if cat["articles"]]
-        total_cats = len(categories_with_articles)
-
-        for done_cats, cat in enumerate(categories_with_articles, start=1):
+        try:
             with _lock:
-                _state["step"] = f"AI 분석 중... ({done_cats}/{total_cats}) {cat['name']}"
+                _state["step"] = "AI 분석 중... (전체 기사 1회 처리)"
+            report_analysis = analyze_report(category_data)
 
-            results = {}
+            analysis_by_cat = {
+                item.get("id"): item.get("articles", [])
+                for item in report_analysis.get("categories", [])
+            }
 
-            def _safe_analyze(idx: int, article: dict, cat_name: str) -> None:
-                try:
-                    results[idx] = analyze_article(cat_name, article)
-                except Exception as exc:
-                    results[idx] = {
+            for cat in category_data:
+                by_index = {
+                    item.get("index"): item
+                    for item in analysis_by_cat.get(cat["id"], [])
+                }
+                for i, article in enumerate(cat["articles"]):
+                    item = by_index.get(i, {})
+                    article["analysis"] = {
+                        "title": article["title"],
+                        "summary": item.get("summary", ""),
+                        "explanation": item.get("explanation", ""),
+                    }
+
+            trends = report_analysis.get("trends", "")
+        except Exception as exc:
+            trends = f"트렌드 분석을 불러오지 못했습니다.\n\n오류: {str(exc)[:200]}"
+            for cat in category_data:
+                for article in cat["articles"]:
+                    article["analysis"] = {
                         "title": article["title"],
                         "summary": "",
                         "explanation": f"분석 중 오류가 발생했습니다: {str(exc)[:120]}",
                     }
 
-            threads = [
-                threading.Thread(target=_safe_analyze, args=(i, article, cat["name"]))
-                for i, article in enumerate(cat["articles"])
-            ]
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join(timeout=90)
-
-            for i, article in enumerate(cat["articles"]):
-                article["analysis"] = results.get(i, {})
-
         with _lock:
             _state["steps_done"] = 2
-            _state["step"] = "트렌드 분석 중..."
-
-        try:
-            trends = analyze_trends(category_data)
-        except Exception as exc:
-            trends = f"트렌드 분석을 불러오지 못했습니다.\n\n오류: {str(exc)[:200]}"
-
-        with _lock:
             _state["steps_done"] = 3
             _state["step"] = "리포트 저장 중..."
 

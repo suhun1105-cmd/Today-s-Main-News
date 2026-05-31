@@ -91,6 +91,67 @@ def analyze_article(cat_name: str, article: dict) -> dict:
     return {"title": title, "summary": "", "explanation": ""}
 
 
+def analyze_report(category_data: list[dict]) -> dict:
+    """전체 리포트를 Gemini 1회 호출로 분석한다.
+
+    무료 Gemini API는 분당 요청 수 제한이 낮기 때문에 기사별로 18회 호출하면
+    429가 쉽게 발생한다. 전체 기사와 트렌드를 한 번에 요청해 요청 수를 줄인다.
+    """
+    payload = []
+    for cat in category_data:
+        payload.append(
+            {
+                "id": cat["id"],
+                "name": cat["name"],
+                "articles": [
+                    {"index": i, "title": article["title"]}
+                    for i, article in enumerate(cat["articles"])
+                    if article.get("title")
+                ],
+            }
+        )
+
+    prompt = (
+        "아래 뉴스 데이터를 분석해서 반드시 JSON 객체 하나로만 응답하세요.\n"
+        "마크다운 코드블록은 사용하지 마세요.\n\n"
+        f"{json.dumps(payload, ensure_ascii=False)}\n\n"
+        "응답 형식:\n"
+        "{\n"
+        '  "categories": [\n'
+        '    {"id": 100, "articles": [\n'
+        '      {"index": 0, "summary": "기사 핵심 2~3문장", "explanation": "기사 설명 3~4문장"},\n'
+        '      {"index": 1, "summary": "...", "explanation": "..."},\n'
+        '      {"index": 2, "summary": "...", "explanation": "..."}\n'
+        "    ]}\n"
+        "  ],\n"
+        '  "trends": "## 1. 오늘의 주요 이슈\\n| 정치 | ... |\\n...\\n\\n## 2. 카테고리별 핵심 키워드\\n| 정치 | `키워드1` `키워드2` `키워드3` |\\n..."\n'
+        "}\n\n"
+        "trends에는 반드시 아래 두 섹션만 포함하세요.\n"
+        "## 1. 오늘의 주요 이슈\n"
+        "헤더와 구분선 없이 데이터 행만 있는 마크다운 표로 작성하세요.\n"
+        "형식: | 카테고리명 | 해당 카테고리의 핵심 이슈를 1~2문장으로 설명 |\n\n"
+        "## 2. 카테고리별 핵심 키워드\n"
+        "헤더와 구분선 없이 데이터 행만 있는 마크다운 표로 작성하세요.\n"
+        "형식: | 카테고리명 | `키워드1` `키워드2` `키워드3` |\n\n"
+        "모든 카테고리와 모든 기사 index를 빠짐없이 포함하세요."
+    )
+
+    response = _json_model.generate_content(
+        prompt,
+        generation_config=GenerationConfig(
+            response_mime_type="application/json",
+            temperature=0.3,
+            max_output_tokens=8192,
+        ),
+        request_options={"timeout": 120},
+    )
+
+    obj = _parse_json_object(response.text or "")
+    if not obj:
+        raise ValueError("Gemini 응답을 JSON으로 파싱하지 못했습니다.")
+    return obj
+
+
 def analyze_trends(category_data: list[dict]) -> str:
     lines = []
     for cat in category_data:
