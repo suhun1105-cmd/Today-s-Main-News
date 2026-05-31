@@ -212,7 +212,7 @@ def index():
     report_date = None
     if report_path:
         mtime = report_path.stat().st_mtime
-        report_date = datetime.fromtimestamp(mtime).strftime("%Y년 %m월 %d일 %H:%M")
+        report_date = datetime.fromtimestamp(mtime, tz=KST).strftime("%Y년 %m월 %d일 %H:%M")
     return render_template("home.html", report_date=report_date, state=_state)
 
 
