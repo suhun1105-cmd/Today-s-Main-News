@@ -29,9 +29,6 @@
       --accent-dark: #15803d;
       --accent-light: #f0fdf4;
       --accent-border: #bbf7d0;
-      --danger-bg: #fef2f2;
-      --danger-border: #fecaca;
-      --danger: #dc2626;
       --radius: 16px;
       --shadow: 0 4px 20px rgba(0,0,0,.08), 0 1px 4px rgba(0,0,0,.05);
     }
@@ -60,7 +57,7 @@
 
     .card-header {
       background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #334155 100%);
-      padding: 32px 28px 28px;
+      padding: 34px 28px 30px;
       text-align: center;
     }
 
@@ -145,13 +142,13 @@
 
     select {
       width: 100%;
-      height: 42px;
+      height: 44px;
       border: 1px solid var(--border);
       border-radius: 10px;
       background: #fff;
       color: var(--text);
       font: inherit;
-      font-size: .9rem;
+      font-size: .92rem;
       padding: 0 12px;
     }
 
@@ -162,114 +159,34 @@
       gap: 7px;
       border: none;
       border-radius: 10px;
-      height: 42px;
-      padding: 0 14px;
+      min-height: 44px;
+      padding: 0 15px;
       background: var(--accent);
       color: #fff;
       text-decoration: none;
       font: inherit;
-      font-size: .84rem;
+      font-size: .86rem;
       font-weight: 800;
       cursor: pointer;
       white-space: nowrap;
     }
     .btn:hover { background: var(--accent-dark); }
 
-    .run-btn {
-      width: 100%;
-      height: 54px;
-      border-radius: 12px;
-      font-size: 1rem;
-      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
-      box-shadow: 0 4px 14px rgba(22,163,74,.35);
-    }
-    .run-btn:disabled { opacity: .55; cursor: not-allowed; }
-
-    .no-report {
+    .empty {
       text-align: center;
       color: var(--light);
-      font-size: .86rem;
+      font-size: .88rem;
       line-height: 1.7;
       padding: 4px 0;
     }
 
-    .hint {
-      text-align: center;
-      font-size: .74rem;
-      color: var(--light);
-      margin-top: 10px;
-    }
-
-    .progress-box {
-      display: none;
-      margin-top: 18px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
-    }
-    .progress-box.visible { display: block; }
-
-    .step-label {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: .84rem;
-      font-weight: 700;
-      margin-bottom: 10px;
-    }
-
-    .spinner {
-      width: 15px;
-      height: 15px;
-      border: 2px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin .7s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    .progress-bar-wrap {
-      height: 7px;
-      background: var(--border);
-      border-radius: 999px;
-      overflow: hidden;
-    }
-
-    .progress-bar {
-      width: 0;
-      height: 100%;
-      background: linear-gradient(90deg, var(--accent), #4ade80);
-      transition: width .35s ease;
-    }
-
-    .step-list {
-      list-style: none;
-      margin-top: 12px;
-      display: grid;
-      gap: 6px;
-    }
-
-    .step-list li {
-      font-size: .78rem;
-      color: var(--light);
-    }
-    .step-list li.done { color: var(--accent-dark); font-weight: 700; }
-    .step-list li.done::before { content: "✓ "; }
-    .step-list li:not(.done)::before { content: "○ "; }
-
-    .error-box {
-      display: none;
-      margin-top: 14px;
-      background: var(--danger-bg);
-      border: 1px solid var(--danger-border);
-      border-radius: 10px;
-      padding: 12px 14px;
+    .notice {
+      background: var(--accent-light);
+      border-color: var(--accent-border);
+      color: var(--accent-dark);
       font-size: .82rem;
-      color: var(--danger);
-      line-height: 1.5;
+      line-height: 1.6;
     }
-    .error-box.visible { display: block; }
 
     .footer-note {
       margin-top: 18px;
@@ -290,7 +207,7 @@
     <div class="card-header">
       <div class="live-badge"><span class="live-dot"></span> AI News Digest</div>
       <h1>Today's<br>Main News</h1>
-      <p class="subtitle">AI가 주요 뉴스를 분석하고 정리합니다</p>
+      <p class="subtitle">매일 오전 9시 기준 주요 뉴스를 정리합니다</p>
     </div>
 
     <div class="card-body">
@@ -303,49 +220,27 @@
         </div>
         <a class="btn" href="/report">보기</a>
       </div>
-      {% else %}
-      <div class="section">
-        <div class="no-report">아직 생성된 리포트가 없습니다.<br />아래 버튼을 눌러 분석을 시작하세요.</div>
-      </div>
       {% endif %}
 
-      {% if reports %}
       <div class="section">
-        <div class="section-title">이전 리포트 보기</div>
+        <div class="section-title">날짜별 리포트 보기</div>
+        {% if reports %}
         <div class="select-row">
-          <select id="reportDate">
+          <select id="reportDate" aria-label="리포트 날짜 선택">
             {% for report in reports %}
             <option value="{{ report.date }}">{{ report.label }}</option>
             {% endfor %}
           </select>
           <button class="btn" type="button" onclick="openSelectedReport()">선택 보기</button>
         </div>
-      </div>
-      {% endif %}
-
-      <button class="btn run-btn" id="runBtn" onclick="startAnalysis()">
-        <span>🧠</span>
-        <span id="btnText">오늘 뉴스 분석하기</span>
-      </button>
-      <p class="hint">분석에는 보통 2~3분 정도 걸립니다.</p>
-
-      <div class="progress-box" id="progressBox">
-        <div class="step-label">
-          <div class="spinner"></div>
-          <span id="stepLabel">준비 중...</span>
-        </div>
-        <div class="progress-bar-wrap">
-          <div class="progress-bar" id="progressBar"></div>
-        </div>
-        <ul class="step-list">
-          <li id="s1">뉴스 수집</li>
-          <li id="s2">기사 AI 분석</li>
-          <li id="s3">트렌드 분석</li>
-          <li id="s4">리포트 저장</li>
-        </ul>
+        {% else %}
+        <div class="empty">아직 생성된 리포트가 없습니다.<br />매일 오전 9시에 자동으로 생성됩니다.</div>
+        {% endif %}
       </div>
 
-      <div class="error-box" id="errorBox"></div>
+      <div class="section notice">
+        리포트는 자동으로 생성됩니다. 앱을 열면 날짜를 선택해 지난 리포트를 확인할 수 있습니다.
+      </div>
     </div>
   </div>
 
@@ -354,90 +249,10 @@
   </p>
 
   <script>
-    let polling = null;
-    let startTime = null;
-    const TIMEOUT_MS = 5 * 60 * 1000;
-
     function openSelectedReport() {
       const select = document.getElementById('reportDate');
       if (!select || !select.value) return;
       window.location.href = '/report?date=' + encodeURIComponent(select.value);
-    }
-
-    async function startAnalysis() {
-      const btn = document.getElementById('runBtn');
-      btn.disabled = true;
-      document.getElementById('btnText').textContent = '분석 중...';
-      document.getElementById('progressBox').classList.add('visible');
-      document.getElementById('errorBox').classList.remove('visible');
-      startTime = Date.now();
-
-      try {
-        const res = await fetch('/analyze', { method: 'POST' });
-        const data = await res.json();
-        if (!data.ok) {
-          showError(data.msg || '분석을 시작하지 못했습니다.');
-          resetBtn();
-          return;
-        }
-      } catch(e) {
-        showError('서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.');
-        resetBtn();
-        return;
-      }
-
-      polling = setInterval(pollStatus, 2000);
-    }
-
-    async function pollStatus() {
-      if (Date.now() - startTime > TIMEOUT_MS) {
-        clearInterval(polling);
-        showError('분석 시간이 초과됐습니다. 잠시 후 다시 시도해주세요.');
-        resetBtn();
-        return;
-      }
-
-      try {
-        const res = await fetch('/status?t=' + Date.now());
-        const s = await res.json();
-        updateUI(s);
-      } catch(e) {}
-    }
-
-    function updateUI(s) {
-      const pct = (s.steps_done / s.steps_total) * 100;
-      document.getElementById('progressBar').style.width = pct + '%';
-
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      document.getElementById('stepLabel').textContent = (s.step || '진행 중...') + ` (${elapsed}초)`;
-
-      for (let i = 1; i <= 4; i++) {
-        const el = document.getElementById('s' + i);
-        if (s.steps_done >= i) el.classList.add('done');
-        else el.classList.remove('done');
-      }
-
-      if (s.error) {
-        clearInterval(polling);
-        showError(s.error);
-        resetBtn();
-      } else if (!s.running && s.steps_done === 4) {
-        clearInterval(polling);
-        window.location.href = '/report';
-      }
-    }
-
-    function showError(msg) {
-      const box = document.getElementById('errorBox');
-      box.textContent = '⚠️ ' + msg;
-      box.classList.add('visible');
-      document.getElementById('progressBox').classList.remove('visible');
-    }
-
-    function resetBtn() {
-      const btn = document.getElementById('runBtn');
-      btn.disabled = false;
-      document.getElementById('btnText').textContent = '다시 분석하기';
     }
   </script>
   <script>

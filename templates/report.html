@@ -383,18 +383,6 @@
     }
     .site-footer strong { color: var(--text-muted); }
 
-    /* 탭바 홈 버튼 */
-    .tab-item-home {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 13px 16px;
-      font-size: 0.8rem; font-weight: 700;
-      color: var(--accent-dark);
-      text-decoration: none;
-      border-bottom: 2px solid var(--accent);
-      margin-bottom: -1px;
-      white-space: nowrap;
-    }
-
     /* 알림 버튼 */
     .notif-btn {
       display: inline-flex; align-items: center; gap: 6px;
@@ -438,8 +426,8 @@
 <!-- ── STICKY TAB BAR ── -->
 <nav class="tab-bar">
   <div class="tab-list">
-    <a class="tab-item-home" href="/?force=1">🔄 새 분석</a>
     <button class="notif-btn" id="notifBtn" onclick="toggleNotif()">🔔 알림</button>
+    <a class="tab-item" href="/">📅 날짜 선택</a>
     <a class="tab-item" href="#trend">🔍 트렌드</a>
     {% for cat in categories %}
     <a class="tab-item" href="#cat-{{ cat.id }}">{{ cat.emoji }} {{ cat.name }}</a>
@@ -522,7 +510,7 @@
 
 <footer class="site-footer">
   <strong>Today's Main News</strong> &nbsp;·&nbsp; Powered by Claude AI &nbsp;·&nbsp; {{ generated_at }} 기준
-  &nbsp;·&nbsp; <a href="/?force=1" style="color:var(--accent);text-decoration:none;">🔄 새로 분석하기</a>
+  &nbsp;·&nbsp; <a href="/" style="color:var(--accent);text-decoration:none;">📅 다른 날짜 보기</a>
 </footer>
 
 <script>
