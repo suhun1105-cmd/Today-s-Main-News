@@ -383,23 +383,17 @@
     }
     .site-footer strong { color: var(--text-muted); }
 
-    /* 알림 버튼 */
-    .notif-bar {
-      position: fixed; bottom: 20px; right: 16px; z-index: 200;
+    /* 탭바 홈 버튼 */
+    .tab-item-home {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 13px 16px;
+      font-size: 0.8rem; font-weight: 700;
+      color: var(--accent-dark);
+      text-decoration: none;
+      border-bottom: 2px solid var(--accent);
+      margin-bottom: -1px;
+      white-space: nowrap;
     }
-    .notif-btn {
-      display: flex; align-items: center; gap: 7px;
-      background: var(--accent); color: #fff;
-      border: none; border-radius: 999px;
-      padding: 11px 18px;
-      font-size: 0.82rem; font-weight: 700;
-      font-family: inherit; cursor: pointer;
-      box-shadow: 0 4px 16px rgba(22,163,74,.4);
-      transition: background .15s, transform .1s;
-    }
-    .notif-btn:hover { background: var(--accent-dark); }
-    .notif-btn:active { transform: scale(.97); }
-    .notif-btn.on { background: #64748b; box-shadow: none; }
 
     @media (max-width: 600px) {
       .site-header { padding: 28px 18px 24px; }
@@ -428,6 +422,7 @@
 <!-- ── STICKY TAB BAR ── -->
 <nav class="tab-bar">
   <div class="tab-list">
+    <a class="tab-item-home" href="/?force=1">🔄 새 분석</a>
     <a class="tab-item" href="#trend">🔍 트렌드</a>
     {% for cat in categories %}
     <a class="tab-item" href="#cat-{{ cat.id }}">{{ cat.emoji }} {{ cat.name }}</a>
@@ -508,13 +503,6 @@
 
 </main>
 
-<!-- 알림 버튼 (우측 하단 고정) -->
-<div class="notif-bar">
-  <button class="notif-btn" id="notifBtn" onclick="toggleNotif()">
-    🔔 알림 받기
-  </button>
-</div>
-
 <footer class="site-footer">
   <strong>Today's Main News</strong> &nbsp;·&nbsp; Powered by Claude AI &nbsp;·&nbsp; {{ generated_at }} 기준
   &nbsp;·&nbsp; <a href="/?force=1" style="color:var(--accent);text-decoration:none;">🔄 새로 분석하기</a>
@@ -594,63 +582,6 @@
 
   const tc = document.getElementById('trend-content');
   if (tc) tc.innerHTML = renderMarkdown(tc.textContent);
-
-  // ── 푸시 알림 ──────────────────────────────
-  const btn = document.getElementById('notifBtn');
-  let currentSub = null;
-
-  async function initNotif() {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      if (btn) btn.style.display = 'none';
-      return;
-    }
-    const reg = await navigator.serviceWorker.ready;
-    currentSub = await reg.pushManager.getSubscription();
-    updateBtn();
-  }
-
-  function updateBtn() {
-    if (!btn) return;
-    if (currentSub) {
-      btn.textContent = '🔕 알림 해제';
-      btn.classList.add('on');
-    } else {
-      btn.textContent = '🔔 알림 받기';
-      btn.classList.remove('on');
-    }
-  }
-
-  async function toggleNotif() {
-    if (!('serviceWorker' in navigator)) return alert('이 브라우저는 알림을 지원하지 않습니다.');
-
-    if (currentSub) {
-      await currentSub.unsubscribe();
-      await fetch('/unsubscribe', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({endpoint: currentSub.endpoint}) });
-      currentSub = null;
-      updateBtn();
-      return;
-    }
-
-    const perm = await Notification.requestPermission();
-    if (perm !== 'granted') return alert('알림 권한을 허용해주세요.');
-
-    const keyRes = await fetch('/vapid-public-key');
-    const { key } = await keyRes.json();
-    if (!key) return alert('서버 설정 오류입니다.');
-
-    const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: key,
-    });
-
-    await fetch('/subscribe', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(sub) });
-    currentSub = sub;
-    updateBtn();
-    alert('알림이 설정됐습니다! 매일 오전 10시, 오후 6시에 알림이 옵니다.');
-  }
-
-  initNotif();
 
   /* ── 탭 활성화 (스크롤 위치 기반) ── */
   const tabs = document.querySelectorAll('.tab-item');
