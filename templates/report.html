@@ -605,14 +605,26 @@
   let _sub = null;
 
   async function initNotif() {
-    if (!notifBtn) return;
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      notifBtn.style.display = 'none'; return;
+      if (notifBtn) notifBtn.style.display = 'none'; return;
     }
     try {
       const reg = await navigator.serviceWorker.ready;
       _sub = await reg.pushManager.getSubscription();
       updateNotifBtn();
+
+      // 이미 구독 중이면 서버에 자동 재등록 (서버 재시작 대응)
+      if (_sub) {
+        const keyRes = await fetch('/vapid-public-key');
+        const { key } = await keyRes.json();
+        if (key) {
+          fetch('/subscribe', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(_sub)
+          });
+        }
+      }
     } catch(e) {}
   }
 
