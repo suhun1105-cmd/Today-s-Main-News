@@ -8,4 +8,4 @@ NAVER_CATEGORIES = [
 ]
 
 MAX_ARTICLES_PER_CATEGORY = 3
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
