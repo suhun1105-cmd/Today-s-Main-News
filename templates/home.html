@@ -312,18 +312,22 @@
       </header>
 
       <main class="body">
-        {% if report_date %}
         <section class="panel latest">
           <div class="latest-row">
             <div class="latest-icon">📰</div>
             <div class="latest-info">
               <div class="latest-label">최신 리포트</div>
+              {% if report_date %}
               <div class="latest-date">{{ report_date }}</div>
+              {% else %}
+              <div class="latest-date">아직 생성된 리포트가 없습니다</div>
+              {% endif %}
             </div>
+            {% if report_date %}
             <a class="btn" href="/report">보기</a>
+            {% endif %}
           </div>
         </section>
-        {% endif %}
 
         <section class="panel">
           <div class="panel-title">날짜별 리포트</div>
