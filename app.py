@@ -129,8 +129,8 @@ def _run_pipeline():
             def _safe_analyze(idx, art, cat_name):
                 try:
                     results[idx] = analyze_article(cat_name, art)
-                except Exception:
-                    results[idx] = {"title": art["title"], "summary": "", "explanation": ""}
+                except Exception as e:
+                    results[idx] = {"title": art["title"], "summary": f"[오류: {str(e)[:80]}]", "explanation": ""}
 
             threads = [
                 threading.Thread(target=_safe_analyze, args=(i, art, cat["name"]))
@@ -199,6 +199,25 @@ def debug():
         "files": [str(p) for p in REPORTS_DIR.glob("*.html")] if REPORTS_DIR.exists() else [],
         "latest": str(_latest_report_path()),
     })
+
+
+@app.route("/test-api")
+def test_api():
+    """Claude API 연결 테스트"""
+    import anthropic as _anthropic
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return jsonify({"ok": False, "error": "ANTHROPIC_API_KEY 환경변수가 없습니다"})
+    try:
+        client = _anthropic.Anthropic(api_key=api_key, timeout=30.0)
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=20,
+            messages=[{"role": "user", "content": "hello"}],
+        )
+        return jsonify({"ok": True, "response": resp.content[0].text})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
 
 
 @app.route("/")
