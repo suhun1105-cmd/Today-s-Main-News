@@ -1,57 +1,67 @@
-import sys
-import os
-import json
 import base64
+import json
+import os
+import sys
 import threading
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
-from dotenv import load_dotenv
-from flask import Flask, render_template, jsonify, send_file, redirect, request
+
 from apscheduler.schedulers.background import BackgroundScheduler
+from dotenv import load_dotenv
+from flask import Flask, jsonify, redirect, render_template, request, send_file
 
 load_dotenv()
 sys.path.insert(0, str(Path(__file__).parent))
 
-from collectors.naver_collector import collect_all
 from analyzers.claude_analyzer import analyze_article, analyze_trends
+from collectors.naver_collector import collect_all
 from reporters import html_reporter, md_reporter
 
 REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 SUBS_FILE = Path(__file__).resolve().parent / "subscriptions.json"
 KST = ZoneInfo("Asia/Seoul")
+
 app = Flask(__name__, template_folder="templates")
 
-# ── 푸시 구독 관리 ──────────────────────────
 _subscriptions: list[dict] = []
+_lock = threading.Lock()
+_state = {
+    "running": False,
+    "step": "",
+    "steps_done": 0,
+    "steps_total": 4,
+    "error": None,
+    "last_report": None,
+}
 
-def _load_subs():
+
+def _load_subs() -> None:
     global _subscriptions
-    if SUBS_FILE.exists():
-        try:
-            _subscriptions = json.loads(SUBS_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            _subscriptions = []
+    if not SUBS_FILE.exists():
+        return
+    try:
+        _subscriptions = json.loads(SUBS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        _subscriptions = []
 
-def _save_subs():
+
+def _save_subs() -> None:
     try:
         SUBS_FILE.write_text(json.dumps(_subscriptions), encoding="utf-8")
     except Exception:
         pass
 
-_load_subs()
 
+def _send_push(title: str, body: str) -> None:
+    from pywebpush import WebPushException, webpush
 
-def _send_push(title: str, body: str):
-    """모든 구독자에게 푸시 알림 전송"""
-    from pywebpush import webpush, WebPushException
-
-    priv_b64 = os.environ.get("VAPID_PRIVATE_KEY_B64", "")
-    if not priv_b64 or not _subscriptions:
+    private_key_b64 = os.environ.get("VAPID_PRIVATE_KEY_B64", "")
+    if not private_key_b64 or not _subscriptions:
         return
 
-    priv_pem = base64.b64decode(priv_b64).decode("utf-8")
-    payload = json.dumps({"title": title, "body": body})
+    private_key = base64.b64decode(private_key_b64).decode("utf-8")
+    payload = json.dumps({"title": title, "body": body}, ensure_ascii=False)
     expired = []
 
     for sub in list(_subscriptions):
@@ -59,11 +69,11 @@ def _send_push(title: str, body: str):
             webpush(
                 subscription_info=sub,
                 data=payload,
-                vapid_private_key=priv_pem,
+                vapid_private_key=private_key,
                 vapid_claims={"sub": "mailto:news@example.com"},
             )
-        except WebPushException as e:
-            if e.response and e.response.status_code in (404, 410):
+        except WebPushException as exc:
+            if exc.response and exc.response.status_code in (404, 410):
                 expired.append(sub)
         except Exception:
             pass
@@ -74,16 +84,6 @@ def _send_push(title: str, body: str):
     if expired:
         _save_subs()
 
-_state = {
-    "running": False,
-    "step": "",
-    "steps_done": 0,
-    "steps_total": 4,
-    "error": None,
-    "last_report": None,
-}
-_lock = threading.Lock()
-
 
 def _latest_report_path() -> Path | None:
     if not REPORTS_DIR.exists():
@@ -93,7 +93,6 @@ def _latest_report_path() -> Path | None:
 
 
 def _is_fresh_report(path: Path) -> bool:
-    """현재 시각 기준 가장 최근 스케줄(10시/18시) 이후에 생성된 리포트인지 확인"""
     now = datetime.now(tz=KST)
     mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=KST)
 
@@ -106,118 +105,140 @@ def _is_fresh_report(path: Path) -> bool:
     return False
 
 
-def _run_pipeline():
-    global _state
+def _run_pipeline() -> None:
     try:
         with _lock:
             _state.update({"running": True, "error": None, "steps_done": 0})
 
-        with _lock: _state["step"] = "뉴스 수집 중..."
+        with _lock:
+            _state["step"] = "뉴스 수집 중..."
         category_data = collect_all()
-        with _lock: _state["steps_done"] = 1
+        with _lock:
+            _state["steps_done"] = 1
 
-        total_cats = len([c for c in category_data if c["articles"]])
-        done_cats = 0
-        for cat in category_data:
-            if not cat["articles"]:
-                continue
+        categories_with_articles = [cat for cat in category_data if cat["articles"]]
+        total_cats = len(categories_with_articles)
+
+        for done_cats, cat in enumerate(categories_with_articles, start=1):
             with _lock:
-                _state["step"] = f"AI 분석 중... ({done_cats + 1}/{total_cats}) {cat['name']}"
+                _state["step"] = f"AI 분석 중... ({done_cats}/{total_cats}) {cat['name']}"
 
             results = {}
 
-            def _safe_analyze(idx, art, cat_name):
+            def _safe_analyze(idx: int, article: dict, cat_name: str) -> None:
                 try:
-                    results[idx] = analyze_article(cat_name, art)
-                except Exception as e:
-                    results[idx] = {"title": art["title"], "summary": f"[오류: {str(e)[:80]}]", "explanation": ""}
+                    results[idx] = analyze_article(cat_name, article)
+                except Exception as exc:
+                    results[idx] = {
+                        "title": article["title"],
+                        "summary": "",
+                        "explanation": f"분석 중 오류가 발생했습니다: {str(exc)[:120]}",
+                    }
 
             threads = [
-                threading.Thread(target=_safe_analyze, args=(i, art, cat["name"]))
-                for i, art in enumerate(cat["articles"])
+                threading.Thread(target=_safe_analyze, args=(i, article, cat["name"]))
+                for i, article in enumerate(cat["articles"])
             ]
-            for t in threads: t.start()
-            for t in threads: t.join(timeout=90)
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=90)
+
             for i, article in enumerate(cat["articles"]):
                 article["analysis"] = results.get(i, {})
-            done_cats += 1
 
-        with _lock: _state["steps_done"] = 2
+        with _lock:
+            _state["steps_done"] = 2
+            _state["step"] = "트렌드 분석 중..."
 
-        with _lock: _state["step"] = "트렌드 분석 중..."
         try:
             trends = analyze_trends(category_data)
-        except Exception:
-            trends = "트렌드 분석을 불러오지 못했습니다."
-        with _lock: _state["steps_done"] = 3
+        except Exception as exc:
+            trends = f"트렌드 분석을 불러오지 못했습니다.\n\n오류: {str(exc)[:200]}"
 
-        with _lock: _state["step"] = "리포트 저장 중..."
+        with _lock:
+            _state["steps_done"] = 3
+            _state["step"] = "리포트 저장 중..."
+
         html_path = html_reporter.generate(category_data, trends, REPORTS_DIR)
         md_reporter.generate(category_data, trends, REPORTS_DIR)
+
         with _lock:
             _state["steps_done"] = 4
             _state["step"] = "완료!"
             _state["last_report"] = str(html_path)
             _state["running"] = False
 
-        # 푸시 알림 전송
         now_str = datetime.now(tz=KST).strftime("%m월 %d일 %H시")
-        _send_push("📰 오늘의 뉴스 리포트 준비됐습니다", f"{now_str} 기준 뉴스 분석이 완료됐습니다. 탭해서 확인하세요.")
+        _send_push(
+            "오늘의 뉴스 리포트가 준비됐습니다",
+            f"{now_str} 기준 뉴스 분석이 완료됐습니다. 앱에서 확인하세요.",
+        )
 
-    except Exception as e:
+    except Exception as exc:
         with _lock:
             _state["running"] = False
             _state["step"] = "오류 발생"
-            _state["error"] = str(e)
+            _state["error"] = str(exc)
 
 
-def _scheduled_run():
+def _scheduled_run() -> None:
     with _lock:
         if _state["running"]:
             return
+
     path = _latest_report_path()
     if path and _is_fresh_report(path):
         return
-    t = threading.Thread(target=_run_pipeline, daemon=True)
-    t.start()
+
+    threading.Thread(target=_run_pipeline, daemon=True).start()
 
 
-# 매일 오전 10시, 오후 6시 (KST) 자동 실행
+_load_subs()
+
 scheduler = BackgroundScheduler(timezone=KST)
 scheduler.add_job(_scheduled_run, "cron", hour=10, minute=0)
 scheduler.add_job(_scheduled_run, "cron", hour=18, minute=0)
 scheduler.start()
 
 
-# ── 라우트 ─────────────────────────────────
-
 @app.route("/debug")
 def debug():
-    return jsonify({
-        "REPORTS_DIR": str(REPORTS_DIR),
-        "exists": REPORTS_DIR.exists(),
-        "files": [str(p) for p in REPORTS_DIR.glob("*.html")] if REPORTS_DIR.exists() else [],
-        "latest": str(_latest_report_path()),
-    })
+    return jsonify(
+        {
+            "reports_dir": str(REPORTS_DIR),
+            "reports_dir_exists": REPORTS_DIR.exists(),
+            "files": [str(p) for p in REPORTS_DIR.glob("*.html")]
+            if REPORTS_DIR.exists()
+            else [],
+            "latest": str(_latest_report_path()),
+            "subscriptions": len(_subscriptions),
+            "has_google_api_key": bool(os.environ.get("GOOGLE_API_KEY")),
+            "has_vapid_private_key": bool(os.environ.get("VAPID_PRIVATE_KEY_B64")),
+            "has_vapid_public_key": bool(os.environ.get("VAPID_PUBLIC_KEY")),
+        }
+    )
 
 
 @app.route("/test-api")
 def test_api():
-    """Claude API 연결 테스트"""
-    import anthropic as _anthropic
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        return jsonify({"ok": False, "error": "ANTHROPIC_API_KEY 환경변수가 없습니다"})
+    if not os.environ.get("GOOGLE_API_KEY"):
+        return jsonify({"ok": False, "error": "GOOGLE_API_KEY 환경변수가 없습니다."})
+
     try:
-        client = _anthropic.Anthropic(api_key=api_key, timeout=30.0)
-        resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=20,
-            messages=[{"role": "user", "content": "hello"}],
+        import google.generativeai as genai
+
+        from config import GEMINI_MODEL
+
+        genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
+        model = genai.GenerativeModel(GEMINI_MODEL)
+        response = model.generate_content(
+            "한국어로 'API 정상'이라고만 답하세요.",
+            request_options={"timeout": 30},
         )
-        return jsonify({"ok": True, "response": resp.content[0].text})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)})
+        return jsonify({"ok": True, "response": response.text})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)})
 
 
 @app.route("/")
@@ -232,6 +253,7 @@ def index():
     if report_path:
         mtime = report_path.stat().st_mtime
         report_date = datetime.fromtimestamp(mtime, tz=KST).strftime("%Y년 %m월 %d일 %H:%M")
+
     return render_template("home.html", report_date=report_date, state=_state)
 
 
@@ -240,8 +262,8 @@ def analyze():
     with _lock:
         if _state["running"]:
             return jsonify({"ok": False, "msg": "이미 분석이 진행 중입니다."})
-    t = threading.Thread(target=_run_pipeline, daemon=True)
-    t.start()
+
+    threading.Thread(target=_run_pipeline, daemon=True).start()
     return jsonify({"ok": True})
 
 
@@ -269,10 +291,11 @@ def subscribe():
     sub = request.get_json()
     if not sub or "endpoint" not in sub:
         return jsonify({"ok": False}), 400
-    # 중복 제거
-    if not any(s.get("endpoint") == sub["endpoint"] for s in _subscriptions):
+
+    if not any(saved.get("endpoint") == sub["endpoint"] for saved in _subscriptions):
         _subscriptions.append(sub)
         _save_subs()
+
     return jsonify({"ok": True})
 
 
@@ -280,7 +303,7 @@ def subscribe():
 def unsubscribe():
     endpoint = (request.get_json() or {}).get("endpoint")
     global _subscriptions
-    _subscriptions = [s for s in _subscriptions if s.get("endpoint") != endpoint]
+    _subscriptions = [sub for sub in _subscriptions if sub.get("endpoint") != endpoint]
     _save_subs()
     return jsonify({"ok": True})
 
@@ -290,19 +313,19 @@ def trigger():
     with _lock:
         if _state["running"]:
             return jsonify({"ok": False, "msg": "already running"})
+
     path = _latest_report_path()
     if path and _is_fresh_report(path):
         return jsonify({"ok": False, "msg": "fresh report already exists"})
-    t = threading.Thread(target=_run_pipeline, daemon=True)
-    t.start()
+
+    threading.Thread(target=_run_pipeline, daemon=True).start()
     return jsonify({"ok": True, "msg": "pipeline started"})
 
 
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 5000))
     print("=" * 45)
-    print("  Today's Main News — 웹 서버 시작")
-    print(f"  http://localhost:{port}  으로 접속하세요")
+    print("  Today's Main News - web server")
+    print(f"  http://localhost:{port}")
     print("=" * 45)
     app.run(host="0.0.0.0", port=port, debug=False)
