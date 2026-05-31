@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import re
 import sys
 import threading
 from datetime import datetime
@@ -85,11 +86,33 @@ def _send_push(title: str, body: str) -> None:
         _save_subs()
 
 
-def _latest_report_path() -> Path | None:
-    if not REPORTS_DIR.exists():
+def _report_path_for_date(date_key: str) -> Path | None:
+    if not re.fullmatch(r"\d{8}", date_key or ""):
         return None
-    reports = sorted(REPORTS_DIR.glob("report_*.html"), reverse=True)
-    return reports[0] if reports else None
+    path = REPORTS_DIR / f"report_{date_key}.html"
+    return path if path.exists() else None
+
+
+def _report_entries() -> list[dict]:
+    if not REPORTS_DIR.exists():
+        return []
+
+    entries = []
+    for path in sorted(REPORTS_DIR.glob("report_*.html"), reverse=True):
+        match = re.fullmatch(r"report_(\d{8})\.html", path.name)
+        if not match:
+            continue
+        date_key = match.group(1)
+        label = f"{date_key[:4]}년 {date_key[4:6]}월 {date_key[6:]}일"
+        entries.append({"date": date_key, "label": label, "path": str(path)})
+    return entries
+
+
+def _latest_report_path() -> Path | None:
+    entries = _report_entries()
+    if not entries:
+        return None
+    return _report_path_for_date(entries[0]["date"])
 
 
 def _is_broken_report(path: Path) -> bool:
@@ -108,13 +131,8 @@ def _is_broken_report(path: Path) -> bool:
 
 
 def _has_today_report(path: Path) -> bool:
-    """오늘 생성된 정상 리포트인지 확인한다.
-
-    스케줄은 오전 9시 하루 1회만 돌기 때문에 시간대별 fresh 판정은 하지 않는다.
-    """
     if _is_broken_report(path):
         return False
-
     mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=KST)
     return mtime.date() == datetime.now(tz=KST).date()
 
@@ -132,7 +150,6 @@ def _run_pipeline() -> None:
 
         try:
             report_analysis = analyze_report(category_data)
-
             analysis_by_cat = {
                 item.get("id"): item.get("articles", [])
                 for item in report_analysis.get("categories", [])
@@ -201,7 +218,6 @@ def _scheduled_run() -> None:
 
 
 _load_subs()
-
 scheduler = BackgroundScheduler(timezone=KST)
 scheduler.add_job(_scheduled_run, "cron", hour=9, minute=0)
 scheduler.start()
@@ -214,9 +230,7 @@ def debug():
         {
             "reports_dir": str(REPORTS_DIR),
             "reports_dir_exists": REPORTS_DIR.exists(),
-            "files": [str(p) for p in REPORTS_DIR.glob("*.html")]
-            if REPORTS_DIR.exists()
-            else [],
+            "reports": _report_entries(),
             "latest": str(latest) if latest else None,
             "has_today_report": bool(latest and _has_today_report(latest)),
             "subscriptions": len(_subscriptions),
@@ -250,18 +264,15 @@ def test_api():
 
 @app.route("/")
 def index():
-    report_path = _latest_report_path()
-    force = request.args.get("force")
-
-    if report_path and _has_today_report(report_path) and not _state["running"] and not force:
-        return redirect("/report")
-
-    report_date = None
-    if report_path:
-        mtime = report_path.stat().st_mtime
-        report_date = datetime.fromtimestamp(mtime, tz=KST).strftime("%Y년 %m월 %d일 %H:%M")
-
-    return render_template("home.html", report_date=report_date, state=_state)
+    reports = _report_entries()
+    latest = reports[0] if reports else None
+    report_date = latest["label"] if latest else None
+    return render_template(
+        "home.html",
+        report_date=report_date,
+        reports=reports,
+        state=_state,
+    )
 
 
 @app.route("/analyze", methods=["POST"])
@@ -282,7 +293,8 @@ def status():
 
 @app.route("/report")
 def report():
-    path = _latest_report_path()
+    date_key = request.args.get("date", "")
+    path = _report_path_for_date(date_key) if date_key else _latest_report_path()
     if not path:
         return redirect("/")
     return send_file(path)
