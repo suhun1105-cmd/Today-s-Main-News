@@ -93,6 +93,18 @@ def _latest_report_path() -> Path | None:
 
 
 def _is_fresh_report(path: Path) -> bool:
+    try:
+        content = path.read_text(encoding="utf-8", errors="ignore")
+        broken_markers = [
+            "models/gemini-1.5-flash is not found",
+            "트렌드 분석을 불러오지 못했습니다",
+            "분석 중 오류가 발생했습니다",
+        ]
+        if any(marker in content for marker in broken_markers):
+            return False
+    except Exception:
+        pass
+
     now = datetime.now(tz=KST)
     mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=KST)
 
@@ -314,8 +326,9 @@ def trigger():
         if _state["running"]:
             return jsonify({"ok": False, "msg": "already running"})
 
+    force = request.args.get("force")
     path = _latest_report_path()
-    if path and _is_fresh_report(path):
+    if path and _is_fresh_report(path) and not force:
         return jsonify({"ok": False, "msg": "fresh report already exists"})
 
     threading.Thread(target=_run_pipeline, daemon=True).start()
