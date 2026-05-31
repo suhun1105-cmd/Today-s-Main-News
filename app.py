@@ -92,45 +92,45 @@ def _latest_report_path() -> Path | None:
     return reports[0] if reports else None
 
 
-def _is_fresh_report(path: Path) -> bool:
+def _is_broken_report(path: Path) -> bool:
     try:
         content = path.read_text(encoding="utf-8", errors="ignore")
-        broken_markers = [
-            "models/gemini-1.5-flash is not found",
-            "트렌드 분석을 불러오지 못했습니다",
-            "분석 중 오류가 발생했습니다",
-        ]
-        if any(marker in content for marker in broken_markers):
-            return False
     except Exception:
-        pass
-
-    now = datetime.now(tz=KST)
-    mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=KST)
-
-    if mtime.date() != now.date():
         return False
-    if now.hour >= 18:
-        return mtime.hour >= 18
-    if now.hour >= 10:
-        return mtime.hour >= 10
-    return False
+
+    broken_markers = [
+        "models/gemini-1.5-flash is not found",
+        "트렌드 분석을 불러오지 못했습니다",
+        "분석 중 오류가 발생했습니다",
+        "429 You exceeded your current quota",
+    ]
+    return any(marker in content for marker in broken_markers)
+
+
+def _has_today_report(path: Path) -> bool:
+    """오늘 생성된 정상 리포트인지 확인한다.
+
+    스케줄은 오전 9시 하루 1회만 돌기 때문에 시간대별 fresh 판정은 하지 않는다.
+    """
+    if _is_broken_report(path):
+        return False
+
+    mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=KST)
+    return mtime.date() == datetime.now(tz=KST).date()
 
 
 def _run_pipeline() -> None:
     try:
         with _lock:
             _state.update({"running": True, "error": None, "steps_done": 0})
-
-        with _lock:
             _state["step"] = "뉴스 수집 중..."
+
         category_data = collect_all()
         with _lock:
             _state["steps_done"] = 1
+            _state["step"] = "AI 분석 중... (전체 기사 1회 처리)"
 
         try:
-            with _lock:
-                _state["step"] = "AI 분석 중... (전체 기사 1회 처리)"
             report_analysis = analyze_report(category_data)
 
             analysis_by_cat = {
@@ -163,7 +163,6 @@ def _run_pipeline() -> None:
                     }
 
         with _lock:
-            _state["steps_done"] = 2
             _state["steps_done"] = 3
             _state["step"] = "리포트 저장 중..."
 
@@ -176,10 +175,10 @@ def _run_pipeline() -> None:
             _state["last_report"] = str(html_path)
             _state["running"] = False
 
-        now_str = datetime.now(tz=KST).strftime("%m월 %d일 %H시")
+        now_str = datetime.now(tz=KST).strftime("%m월 %d일 오전 9시")
         _send_push(
             "오늘의 뉴스 리포트가 준비됐습니다",
-            f"{now_str} 기준 뉴스 분석이 완료됐습니다. 앱에서 확인하세요.",
+            f"{now_str} 기준 뉴스 리포트가 생성됐습니다. 앱에서 확인하세요.",
         )
 
     except Exception as exc:
@@ -195,7 +194,7 @@ def _scheduled_run() -> None:
             return
 
     path = _latest_report_path()
-    if path and _is_fresh_report(path):
+    if path and _has_today_report(path):
         return
 
     threading.Thread(target=_run_pipeline, daemon=True).start()
@@ -204,13 +203,13 @@ def _scheduled_run() -> None:
 _load_subs()
 
 scheduler = BackgroundScheduler(timezone=KST)
-scheduler.add_job(_scheduled_run, "cron", hour=10, minute=0)
-scheduler.add_job(_scheduled_run, "cron", hour=18, minute=0)
+scheduler.add_job(_scheduled_run, "cron", hour=9, minute=0)
 scheduler.start()
 
 
 @app.route("/debug")
 def debug():
+    latest = _latest_report_path()
     return jsonify(
         {
             "reports_dir": str(REPORTS_DIR),
@@ -218,7 +217,8 @@ def debug():
             "files": [str(p) for p in REPORTS_DIR.glob("*.html")]
             if REPORTS_DIR.exists()
             else [],
-            "latest": str(_latest_report_path()),
+            "latest": str(latest) if latest else None,
+            "has_today_report": bool(latest and _has_today_report(latest)),
             "subscriptions": len(_subscriptions),
             "has_google_api_key": bool(os.environ.get("GOOGLE_API_KEY")),
             "has_vapid_private_key": bool(os.environ.get("VAPID_PRIVATE_KEY_B64")),
@@ -253,7 +253,7 @@ def index():
     report_path = _latest_report_path()
     force = request.args.get("force")
 
-    if report_path and _is_fresh_report(report_path) and not _state["running"] and not force:
+    if report_path and _has_today_report(report_path) and not _state["running"] and not force:
         return redirect("/report")
 
     report_date = None
@@ -323,8 +323,8 @@ def trigger():
 
     force = request.args.get("force")
     path = _latest_report_path()
-    if path and _is_fresh_report(path) and not force:
-        return jsonify({"ok": False, "msg": "fresh report already exists"})
+    if path and _has_today_report(path) and not force:
+        return jsonify({"ok": False, "msg": "today report already exists"})
 
     threading.Thread(target=_run_pipeline, daemon=True).start()
     return jsonify({"ok": True, "msg": "pipeline started"})
