@@ -1,9 +1,11 @@
 import sys
-import httpx
-import feedparser
-from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from config import NAVER_CATEGORIES, MAX_ARTICLES_PER_CATEGORY
+
+import feedparser
+import httpx
+from bs4 import BeautifulSoup
+
+from config import DEFAULT_ARTICLES_PER_CATEGORY, NAVER_CATEGORIES
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -19,7 +21,7 @@ _HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
 
-# 해외 서버에서 네이버 차단 시 사용할 RSS 폴백
+# 해외 클라우드에서 네이버 접근이 막힐 때 사용하는 RSS 폴백
 _RSS_FALLBACK = {
     100: "https://www.yna.co.kr/rss/politics.xml",
     101: "https://www.yna.co.kr/rss/economy.xml",
@@ -30,15 +32,20 @@ _RSS_FALLBACK = {
 }
 
 
+def _category_limit(cat: dict) -> int:
+    return int(cat.get("limit", DEFAULT_ARTICLES_PER_CATEGORY))
+
+
 def _fetch_rss_fallback(cat: dict) -> list[dict]:
-    """네이버 차단 시 RSS로 대체 수집"""
     url = _RSS_FALLBACK.get(cat["id"])
+    limit = _category_limit(cat)
     if not url:
         return []
+
     try:
         feed = feedparser.parse(url, request_headers={"User-Agent": "Mozilla/5.0"})
         articles = []
-        for entry in feed.entries[:MAX_ARTICLES_PER_CATEGORY]:
+        for entry in feed.entries[:limit]:
             title = entry.get("title", "").strip()
             link = entry.get("link", "")
             if title and link:
@@ -49,8 +56,10 @@ def _fetch_rss_fallback(cat: dict) -> list[dict]:
 
 
 def _fetch_category(cat: dict) -> dict:
-    # 1차: 네이버 스크래핑 시도
+    limit = _category_limit(cat)
     articles = []
+    source = "Naver"
+
     try:
         url = f"https://news.naver.com/section/{cat['id']}"
         resp = httpx.get(url, headers=_HEADERS, follow_redirects=True, timeout=15)
@@ -66,6 +75,7 @@ def _fetch_category(cat: dict) -> dict:
             ".section_article a",
             "a[class*='title']",
         ]
+
         for selector in selectors:
             for tag in soup.select(selector):
                 title = tag.get_text(strip=True)
@@ -76,25 +86,22 @@ def _fetch_category(cat: dict) -> dict:
                     href = "https://news.naver.com" + href
                 seen_titles.add(title)
                 articles.append({"title": title, "link": href, "summary": ""})
-                if len(articles) >= MAX_ARTICLES_PER_CATEGORY:
+                if len(articles) >= limit:
                     break
-            if len(articles) >= MAX_ARTICLES_PER_CATEGORY:
+            if len(articles) >= limit:
                 break
     except Exception:
         pass
 
-    # 2차: 네이버 차단 시 RSS 폴백
     if not articles:
         articles = _fetch_rss_fallback(cat)
         source = "RSS"
-    else:
-        source = "Naver"
 
     return {
         "id": cat["id"],
         "name": cat["name"],
         "emoji": cat["emoji"],
-        "articles": articles[:MAX_ARTICLES_PER_CATEGORY],
+        "articles": articles[:limit],
         "error": None if articles else "기사 수집 실패",
         "source": source,
     }
@@ -109,7 +116,10 @@ def collect_all() -> list[dict]:
             if result["error"]:
                 print(f"  [경고] {result['name']}: {result['error']}")
             else:
-                print(f"  [OK] {result['name']} ({result.get('source','?')}) - {len(result['articles'])}건")
+                print(
+                    f"  [OK] {result['name']} ({result.get('source', '?')}) "
+                    f"- {len(result['articles'])}건"
+                )
             results.append(result)
 
     order = {cat["id"]: i for i, cat in enumerate(NAVER_CATEGORIES)}
