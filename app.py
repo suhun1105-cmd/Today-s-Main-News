@@ -111,6 +111,12 @@ def _report_entries() -> list[dict]:
     return entries
 
 
+def _today_label() -> str:
+    now = datetime.now(tz=KST)
+    weekday = WEEKDAYS_KO[now.weekday()]
+    return now.strftime(f"%Y년 %m월 %d일 {weekday}")
+
+
 def _latest_report_path() -> Path | None:
     entries = _report_entries()
     if not entries:
@@ -274,6 +280,7 @@ def index():
         "home.html",
         report_date=report_date,
         reports=reports,
+        today_label=_today_label(),
         state=_state,
     )
 
