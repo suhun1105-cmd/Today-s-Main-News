@@ -22,7 +22,7 @@ from reporters import html_reporter, md_reporter
 REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 SUBS_FILE = Path(__file__).resolve().parent / "subscriptions.json"
 KST = ZoneInfo("Asia/Seoul")
-WEEKDAYS_KO = ["\uc6d4", "\ud654", "\uc218", "\ubaa9", "\uae08", "\ud1a0", "\uc77c"]
+WEEKDAYS_KO = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
 
 app = Flask(__name__, template_folder="templates")
 
@@ -106,7 +106,7 @@ def _report_entries() -> list[dict]:
         date_key = match.group(1)
         report_date = datetime.strptime(date_key, "%Y%m%d")
         weekday = WEEKDAYS_KO[report_date.weekday()]
-        label = f"{date_key[:4]}\ub144 {date_key[4:6]}\uc6d4 {date_key[6:]}\uc77c ({weekday})"
+        label = f"{date_key[:4]}년 {date_key[4:6]}월 {date_key[6:]}일 {weekday}"
         entries.append({"date": date_key, "label": label, "path": str(path)})
     return entries
 
