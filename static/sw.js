@@ -1,4 +1,4 @@
-const CACHE = 'tmn-v3';
+const CACHE = 'tmn-v4';
 
 self.addEventListener('install', event => {
   self.skipWaiting();

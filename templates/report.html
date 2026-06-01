@@ -398,6 +398,15 @@
     }
     .notif-btn:hover { color: var(--accent-dark); border-bottom-color: var(--accent); }
     .notif-btn.subscribed { color: var(--accent-dark); border-bottom-color: var(--accent); }
+    .notif-btn.is-busy { opacity: .65; cursor: wait; }
+    .notification-status {
+      max-width: 1120px;
+      margin: 10px auto 0;
+      padding: 0 20px;
+      color: var(--text-light);
+      font-size: .78rem;
+      line-height: 1.55;
+    }
 
     @media (max-width: 600px) {
       .site-header { padding: 28px 18px 24px; }
@@ -426,13 +435,14 @@
 <!-- ── STICKY TAB BAR ── -->
 <nav class="tab-bar">
   <div class="tab-list">
-    <button class="notif-btn" id="notifBtn" onclick="toggleNotif()">🔔 알림</button>
+    <button class="notif-btn" id="notifBtn" data-notification-button>🔔 알림</button>
     <a class="tab-item" href="/">📅 날짜 선택</a>
     <a class="tab-item" href="#trend">🔍 트렌드</a>
     {% for cat in categories %}
     <a class="tab-item" href="#cat-{{ cat.id }}">{{ cat.emoji }} {{ cat.name }}</a>
     {% endfor %}
   </div>
+  <div class="notification-status" data-notification-status hidden></div>
 </nav>
 
 <main>
@@ -588,111 +598,6 @@
   const tc = document.getElementById('trend-content');
   if (tc) tc.innerHTML = renderMarkdown(tc.textContent);
 
-  /* ── 푸시 알림 ── */
-  const notifBtn = document.getElementById('notifBtn');
-  let _sub = null;
-
-  async function initNotif() {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      if (notifBtn) notifBtn.style.display = 'none'; return;
-    }
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      _sub = await reg.pushManager.getSubscription();
-      updateNotifBtn();
-
-      // 이미 구독 중이면 서버에 자동 재등록 (서버 재시작 대응)
-      if (_sub) {
-        const keyRes = await fetch('/vapid-public-key');
-        const { key } = await keyRes.json();
-        if (key) {
-          fetch('/subscribe', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(_sub)
-          });
-        }
-      }
-    } catch(e) {}
-  }
-
-  function updateNotifBtn() {
-    if (!notifBtn) return;
-    if (_sub) {
-      notifBtn.textContent = '🔕 알림 해제';
-      notifBtn.classList.add('subscribed');
-    } else {
-      notifBtn.textContent = '🔔 알림';
-      notifBtn.classList.remove('subscribed');
-    }
-  }
-
-  async function toggleNotif() {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      alert('이 브라우저는 푸시 알림을 지원하지 않습니다.\n(Chrome 브라우저를 사용해주세요)');
-      return;
-    }
-
-    // 알림 해제
-    if (_sub) {
-      try {
-        await _sub.unsubscribe();
-        await fetch('/unsubscribe', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({endpoint: _sub.endpoint})
-        });
-        _sub = null;
-        updateNotifBtn();
-        alert('알림이 해제됐습니다.');
-      } catch(e) {
-        alert('알림 해제 중 오류가 발생했습니다: ' + e.message);
-      }
-      return;
-    }
-
-    // 알림 등록
-    const perm = await Notification.requestPermission();
-    if (perm === 'denied') {
-      alert('알림이 차단됐습니다.\n브라우저 설정에서 이 사이트의 알림을 허용해주세요.');
-      return;
-    }
-    if (perm !== 'granted') {
-      alert('알림 권한을 허용해야 합니다.');
-      return;
-    }
-
-    try {
-      const keyRes = await fetch('/vapid-public-key');
-      const { key } = await keyRes.json();
-      if (!key) {
-        alert('서버 설정이 완료되지 않았습니다.\nRender 환경변수에 VAPID_PUBLIC_KEY를 추가해주세요.');
-        return;
-      }
-
-      const reg = await navigator.serviceWorker.ready;
-      _sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: key
-      });
-
-      const res = await fetch('/subscribe', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(_sub)
-      });
-
-      if ((await res.json()).ok) {
-        updateNotifBtn();
-        alert('✅ 알림 설정 완료!\n매일 오전 10시, 오후 6시에 뉴스 리포트 알림이 옵니다.');
-      }
-    } catch(e) {
-      alert('알림 설정 중 오류가 발생했습니다:\n' + e.message);
-    }
-  }
-
-  initNotif();
-
   /* ── 탭 활성화 (스크롤 위치 기반) ── */
   const tabs = document.querySelectorAll('.tab-item');
   const ioOpts = { threshold: 0.2, rootMargin: '-60px 0px 0px 0px' };
@@ -714,5 +619,6 @@
     if (el.id === 'trend' || el.id.startsWith('cat-')) io.observe(el);
   });
 </script>
+<script src="/static/notifications.js"></script>
 </body>
 </html>

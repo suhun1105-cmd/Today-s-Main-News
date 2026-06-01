@@ -247,6 +247,25 @@
       box-shadow: 0 8px 18px rgba(22,163,74,.22);
     }
     .btn:hover { background: var(--accent-dark); }
+    .btn.secondary {
+      background: #0f172a;
+      box-shadow: 0 8px 18px rgba(15,23,42,.18);
+    }
+    .btn.secondary:hover { background: #1e293b; }
+    .btn.is-busy { opacity: .72; cursor: wait; }
+
+    .notification-actions {
+      display: flex;
+      gap: 9px;
+      align-items: center;
+    }
+
+    .notification-status {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: .8rem;
+      line-height: 1.55;
+    }
 
     .empty {
       text-align: center;
@@ -320,6 +339,14 @@
           {% endif %}
         </section>
 
+        <section class="panel">
+          <div class="panel-title">알림 설정</div>
+          <div class="notification-actions">
+            <button class="btn secondary" data-notification-button type="button">알림 받기</button>
+          </div>
+          <div class="notification-status" data-notification-status hidden></div>
+        </section>
+
       </main>
     </div>
 
@@ -333,10 +360,6 @@
       window.location.href = '/report?date=' + encodeURIComponent(select.value);
     }
   </script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/static/sw.js');
-    }
-  </script>
+  <script src="/static/notifications.js"></script>
 </body>
 </html>

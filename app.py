@@ -239,6 +239,27 @@ def _github_report_html(date_key: str) -> str | None:
         return None
 
 
+def _prepare_report_html(html: str) -> str:
+    html = html.replace(' onclick="toggleNotif()"', "")
+    html = html.replace(" onclick='toggleNotif()'", "")
+
+    if "data-notification-status" not in html and "</nav>" in html:
+        html = html.replace(
+            "</nav>",
+            '<div class="notification-status" data-notification-status hidden></div></nav>',
+            1,
+        )
+
+    if "/static/notifications.js" not in html and "</body>" in html:
+        html = html.replace(
+            "</body>",
+            '<script src="/static/notifications.js"></script>\n</body>',
+            1,
+        )
+
+    return html
+
+
 def _save_report_to_github(date_key: str, html: str) -> None:
     if not _github_enabled() or _is_broken_html(html):
         return
@@ -491,12 +512,13 @@ def report():
 
     html = _github_report_html(date_key)
     if html:
-        return Response(html, mimetype="text/html; charset=utf-8")
+        return Response(_prepare_report_html(html), mimetype="text/html; charset=utf-8")
 
     path = _local_report_path_for_date(date_key)
     if not path:
         return redirect("/")
-    return send_file(path)
+    html = path.read_text(encoding="utf-8", errors="ignore")
+    return Response(_prepare_report_html(html), mimetype="text/html; charset=utf-8")
 
 
 @app.route("/vapid-public-key")
