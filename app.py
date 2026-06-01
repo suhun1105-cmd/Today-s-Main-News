@@ -254,25 +254,22 @@ def _prepare_report_html(html: str) -> str:
     html = html.replace(' onclick="toggleNotif()"', "")
     html = html.replace(" onclick='toggleNotif()'", "")
     html = re.sub(
+        r'<button[^>]*(id=["\']notifBtn["\']|data-notification-button)[\s\S]*?</button>',
+        "",
+        html,
+    )
+    html = re.sub(
+        r'<div class=["\']notification-status["\'][^>]*data-notification-status[^>]*></div>',
+        "",
+        html,
+    )
+    html = html.replace('<script src="/static/notifications.js"></script>', "")
+    html = re.sub(
         r"##\s*1\.\s*오늘의 주요\s*(이슈|뉴스)[\s\S]*?(?=##\s*2\.\s*카테고리별 핵심 키워드)",
         "",
         html,
     )
     html = re.sub(r"##\s*2\.\s*카테고리별 핵심 키워드", "## 카테고리별 핵심 키워드", html)
-
-    if "data-notification-status" not in html and "</nav>" in html:
-        html = html.replace(
-            "</nav>",
-            '<div class="notification-status" data-notification-status hidden></div></nav>',
-            1,
-        )
-
-    if "/static/notifications.js" not in html and "</body>" in html:
-        html = html.replace(
-            "</body>",
-            '<script src="/static/notifications.js"></script>\n</body>',
-            1,
-        )
 
     return html
 
@@ -553,15 +550,16 @@ def subscribe():
         _subscriptions.append(sub)
         _save_subs()
 
-    threading.Thread(
-        target=_send_push_to_subscription,
-        args=(
-            sub,
-            "알림 설정 완료",
-            "이제 매일 오전 9시 뉴스 리포트가 생성되면 알림을 보내드릴게요.",
-        ),
-        daemon=True,
-    ).start()
+    if request.args.get("test") == "1":
+        threading.Thread(
+            target=_send_push_to_subscription,
+            args=(
+                sub,
+                "알림 설정 완료",
+                "이제 매일 오전 9시 뉴스 리포트가 생성되면 알림을 보내드릴게요.",
+            ),
+            daemon=True,
+        ).start()
 
     return jsonify({"ok": True, "test_queued": True})
 

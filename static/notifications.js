@@ -15,7 +15,28 @@
   }
 
   function buttons() {
-    return Array.from(document.querySelectorAll('[data-notification-button], #notifBtn'));
+    return Array.from(document.querySelectorAll('[data-notification-button]'));
+  }
+
+  function withTimeout(promise, ms, message) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        window.setTimeout(() => reject(new Error(message)), ms);
+      }),
+    ]);
+  }
+
+  async function postSubscription(url, subscription) {
+    const response = await withTimeout(fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(subscription),
+    }), 10000, '서버 응답이 늦습니다. 잠시 후 다시 시도해주세요.');
+
+    const result = await response.json();
+    if (!result.ok) throw new Error('서버 구독 저장 실패');
+    return result;
   }
 
   function setStatus(message) {
@@ -64,11 +85,7 @@
       updateButtons();
 
       if (currentSubscription) {
-        await fetch('/subscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(currentSubscription),
-        });
+        await postSubscription('/subscribe', currentSubscription);
         setStatus('이 기기는 이미 알림을 받도록 등록되어 있습니다.');
       }
     } catch (error) {
@@ -97,7 +114,7 @@
         return;
       }
 
-      setStatus('알림 등록 중입니다...');
+      setStatus('알림 설정을 준비하는 중입니다...');
       const keyResponse = await fetch('/vapid-public-key', { cache: 'no-store' });
       const keyData = await keyResponse.json();
       if (!keyData.key) {
@@ -105,18 +122,17 @@
       }
 
       const registration = await registerServiceWorker();
-      currentSubscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(keyData.key),
-      });
+      currentSubscription = await registration.pushManager.getSubscription();
+      if (!currentSubscription) {
+        setStatus('브라우저 알림 권한을 등록하는 중입니다...');
+        currentSubscription = await withTimeout(registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(keyData.key),
+        }), 15000, '브라우저 알림 등록 시간이 초과되었습니다. Chrome 알림 권한을 확인해주세요.');
+      }
 
-      const subscribeResponse = await fetch('/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(currentSubscription),
-      });
-      const result = await subscribeResponse.json();
-      if (!result.ok) throw new Error('서버 구독 저장 실패');
+      setStatus('서버에 알림 기기를 저장하는 중입니다...');
+      await postSubscription('/subscribe?test=1', currentSubscription);
 
       updateButtons();
       setStatus('알림 설정 완료. 테스트 알림을 보내는 중입니다.');
@@ -137,11 +153,11 @@
       if (currentSubscription) {
         const endpoint = currentSubscription.endpoint;
         await currentSubscription.unsubscribe();
-        await fetch('/unsubscribe', {
+        await withTimeout(fetch('/unsubscribe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ endpoint }),
-        });
+        }), 10000, '서버 응답이 늦습니다. 잠시 후 다시 시도해주세요.');
       }
 
       currentSubscription = null;
