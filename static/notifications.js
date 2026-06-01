@@ -119,8 +119,13 @@
       if (!result.ok) throw new Error('서버 구독 저장 실패');
 
       updateButtons();
-      setStatus('알림 등록 완료. 매일 오전 9시 리포트 생성 후 알림이 옵니다.');
-      alert('알림 등록 완료!\n매일 오전 9시 리포트 생성 후 알림이 옵니다.');
+      if (result.test_sent) {
+        setStatus('알림 등록 완료. 핸드폰에 테스트 알림을 보냈습니다.');
+        alert('알림 등록 완료!\n핸드폰 상단에 테스트 알림이 표시됩니다.');
+      } else {
+        setStatus('알림 등록 완료. 매일 오전 9시 리포트 생성 후 알림이 옵니다.');
+        alert('알림 등록 완료!\n매일 오전 9시 리포트 생성 후 알림이 옵니다.');
+      }
     } catch (error) {
       setStatus('알림 등록 실패: ' + error.message);
       alert('알림 등록 실패:\n' + error.message);

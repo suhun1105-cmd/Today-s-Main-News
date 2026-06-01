@@ -98,30 +98,41 @@ def _save_subs() -> None:
         pass
 
 
-def _send_push(title: str, body: str) -> None:
+def _send_push_to_subscription(sub: dict, title: str, body: str) -> tuple[bool, bool]:
     from pywebpush import WebPushException, webpush
 
     private_key_b64 = os.environ.get("VAPID_PRIVATE_KEY_B64", "")
-    if not private_key_b64 or not _subscriptions:
-        return
+    if not private_key_b64:
+        return False, False
 
     private_key = base64.b64decode(private_key_b64).decode("utf-8")
     payload = json.dumps({"title": title, "body": body}, ensure_ascii=False)
+
+    try:
+        webpush(
+            subscription_info=sub,
+            data=payload,
+            vapid_private_key=private_key,
+            vapid_claims={"sub": "mailto:news@example.com"},
+        )
+        return True, False
+    except WebPushException as exc:
+        expired = bool(exc.response and exc.response.status_code in (404, 410))
+        return False, expired
+    except Exception:
+        return False, False
+
+
+def _send_push(title: str, body: str) -> None:
+    if not _subscriptions:
+        return
+
     expired = []
 
     for sub in list(_subscriptions):
-        try:
-            webpush(
-                subscription_info=sub,
-                data=payload,
-                vapid_private_key=private_key,
-                vapid_claims={"sub": "mailto:news@example.com"},
-            )
-        except WebPushException as exc:
-            if exc.response and exc.response.status_code in (404, 410):
-                expired.append(sub)
-        except Exception:
-            pass
+        sent, is_expired = _send_push_to_subscription(sub, title, body)
+        if not sent and is_expired:
+            expired.append(sub)
 
     for sub in expired:
         if sub in _subscriptions:
@@ -536,7 +547,13 @@ def subscribe():
         _subscriptions.append(sub)
         _save_subs()
 
-    return jsonify({"ok": True})
+    test_sent, _ = _send_push_to_subscription(
+        sub,
+        "알림 설정 완료",
+        "이제 매일 오전 9시 뉴스 리포트가 생성되면 알림을 보내드릴게요.",
+    )
+
+    return jsonify({"ok": True, "test_sent": test_sent})
 
 
 @app.route("/unsubscribe", methods=["POST"])
