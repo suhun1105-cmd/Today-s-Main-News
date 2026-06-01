@@ -4,7 +4,7 @@ import os
 import re
 import sys
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -28,6 +28,7 @@ WEEKDAYS_KO = ["월요일", "화요일", "수요일", "목요일", "금요일", 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "suhun1105-cmd/Today-s-Main-News")
 GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
+REPORT_RETENTION_DAYS = 7
 
 app = Flask(__name__, template_folder="templates")
 
@@ -184,6 +185,30 @@ def _github_report_entries() -> list[dict]:
         return []
 
 
+def _github_report_files() -> list[dict]:
+    if not _github_enabled():
+        return []
+
+    try:
+        resp = httpx.get(
+            _github_contents_url("reports"),
+            headers=_github_headers(),
+            params={"ref": GITHUB_BRANCH},
+            timeout=15,
+        )
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+        files = []
+        for item in resp.json():
+            match = re.fullmatch(r"report_(\d{8})\.html", item.get("name", ""))
+            if match:
+                files.append({"date": match.group(1), "path": item["path"], "sha": item["sha"]})
+        return files
+    except Exception:
+        return []
+
+
 def _report_entries() -> list[dict]:
     merged: dict[str, dict] = {}
     for entry in _local_report_entries():
@@ -250,6 +275,29 @@ def _save_report_to_github(date_key: str, html: str) -> None:
         ).raise_for_status()
     except Exception:
         pass
+
+
+def _cleanup_old_github_reports() -> None:
+    if not _github_enabled():
+        return
+
+    cutoff = (datetime.now(tz=KST) - timedelta(days=REPORT_RETENTION_DAYS - 1)).strftime("%Y%m%d")
+    for item in _github_report_files():
+        if item["date"] >= cutoff:
+            continue
+        try:
+            httpx.delete(
+                _github_contents_url(item["path"]),
+                headers=_github_headers(),
+                json={
+                    "message": f"Remove old news report {item['date']}",
+                    "sha": item["sha"],
+                    "branch": GITHUB_BRANCH,
+                },
+                timeout=30,
+            ).raise_for_status()
+        except Exception:
+            pass
 
 
 def _latest_report_date() -> str | None:
@@ -325,6 +373,7 @@ def _run_pipeline() -> None:
         date_key = datetime.now(tz=KST).strftime("%Y%m%d")
         html = html_path.read_text(encoding="utf-8")
         _save_report_to_github(date_key, html)
+        _cleanup_old_github_reports()
 
         with _lock:
             _state["steps_done"] = 4
