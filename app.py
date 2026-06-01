@@ -6,7 +6,6 @@ import sys
 import threading
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -26,8 +25,9 @@ SUBS_FILE = Path(__file__).resolve().parent / "subscriptions.json"
 KST = ZoneInfo("Asia/Seoul")
 WEEKDAYS_KO = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
-SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "suhun1105-cmd/Today-s-Main-News")
+GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
 
 app = Flask(__name__, template_folder="templates")
 
@@ -43,23 +43,20 @@ _state = {
 }
 
 
-def _supabase_enabled() -> bool:
-    return bool(SUPABASE_URL and SUPABASE_KEY)
+def _github_enabled() -> bool:
+    return bool(GITHUB_TOKEN and GITHUB_REPO)
 
 
-def _supabase_headers(prefer: str | None = None) -> dict:
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type": "application/json",
+def _github_headers() -> dict:
+    return {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
     }
-    if prefer:
-        headers["Prefer"] = prefer
-    return headers
 
 
-def _supabase_url(path: str) -> str:
-    return f"{SUPABASE_URL}/rest/v1/{path}"
+def _github_contents_url(path: str) -> str:
+    return f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}"
 
 
 def _label_for_date(date_key: str) -> str:
@@ -85,20 +82,6 @@ def _is_broken_html(content: str) -> bool:
 
 def _load_subs() -> None:
     global _subscriptions
-
-    if _supabase_enabled():
-        try:
-            resp = httpx.get(
-                _supabase_url("push_subscriptions?select=subscription"),
-                headers=_supabase_headers(),
-                timeout=15,
-            )
-            resp.raise_for_status()
-            _subscriptions = [row["subscription"] for row in resp.json() if row.get("subscription")]
-            return
-        except Exception:
-            _subscriptions = []
-
     if not SUBS_FILE.exists():
         return
     try:
@@ -107,43 +90,11 @@ def _load_subs() -> None:
         _subscriptions = []
 
 
-def _save_subs_local() -> None:
+def _save_subs() -> None:
     try:
         SUBS_FILE.write_text(json.dumps(_subscriptions), encoding="utf-8")
     except Exception:
         pass
-
-
-def _save_subscription(sub: dict) -> None:
-    if _supabase_enabled():
-        try:
-            httpx.post(
-                _supabase_url("push_subscriptions"),
-                headers=_supabase_headers("resolution=merge-duplicates"),
-                json={"endpoint": sub["endpoint"], "subscription": sub},
-                timeout=15,
-            ).raise_for_status()
-            return
-        except Exception:
-            pass
-
-    _save_subs_local()
-
-
-def _delete_subscription(endpoint: str) -> None:
-    if _supabase_enabled():
-        try:
-            encoded = quote(endpoint, safe="")
-            httpx.delete(
-                _supabase_url(f"push_subscriptions?endpoint=eq.{encoded}"),
-                headers=_supabase_headers(),
-                timeout=15,
-            ).raise_for_status()
-            return
-        except Exception:
-            pass
-
-    _save_subs_local()
 
 
 def _send_push(title: str, body: str) -> None:
@@ -174,8 +125,8 @@ def _send_push(title: str, body: str) -> None:
     for sub in expired:
         if sub in _subscriptions:
             _subscriptions.remove(sub)
-        if sub.get("endpoint"):
-            _delete_subscription(sub["endpoint"])
+    if expired:
+        _save_subs()
 
 
 def _local_report_path_for_date(date_key: str) -> Path | None:
@@ -201,25 +152,34 @@ def _local_report_entries() -> list[dict]:
     return entries
 
 
-def _cloud_report_entries() -> list[dict]:
-    if not _supabase_enabled():
+def _github_report_entries() -> list[dict]:
+    if not _github_enabled():
         return []
+
     try:
         resp = httpx.get(
-            _supabase_url("reports?select=report_date&order=report_date.desc"),
-            headers=_supabase_headers(),
+            _github_contents_url("reports"),
+            headers=_github_headers(),
+            params={"ref": GITHUB_BRANCH},
             timeout=15,
         )
+        if resp.status_code == 404:
+            return []
         resp.raise_for_status()
-        return [
-            {
-                "date": row["report_date"],
-                "label": _label_for_date(row["report_date"]),
-                "source": "supabase",
-            }
-            for row in resp.json()
-            if row.get("report_date")
-        ]
+        entries = []
+        for item in resp.json():
+            match = re.fullmatch(r"report_(\d{8})\.html", item.get("name", ""))
+            if not match:
+                continue
+            date_key = match.group(1)
+            entries.append(
+                {
+                    "date": date_key,
+                    "label": _label_for_date(date_key),
+                    "source": "github",
+                }
+            )
+        return entries
     except Exception:
         return []
 
@@ -228,36 +188,65 @@ def _report_entries() -> list[dict]:
     merged: dict[str, dict] = {}
     for entry in _local_report_entries():
         merged[entry["date"]] = entry
-    for entry in _cloud_report_entries():
+    for entry in _github_report_entries():
         merged[entry["date"]] = entry
     return sorted(merged.values(), key=lambda item: item["date"], reverse=True)
 
 
-def _cloud_report_html(date_key: str) -> str | None:
-    if not _supabase_enabled() or not re.fullmatch(r"\d{8}", date_key or ""):
+def _github_report_html(date_key: str) -> str | None:
+    if not _github_enabled() or not re.fullmatch(r"\d{8}", date_key or ""):
         return None
+
     try:
         resp = httpx.get(
-            _supabase_url(f"reports?report_date=eq.{date_key}&select=html&limit=1"),
-            headers=_supabase_headers(),
+            _github_contents_url(f"reports/report_{date_key}.html"),
+            headers=_github_headers(),
+            params={"ref": GITHUB_BRANCH},
             timeout=15,
         )
+        if resp.status_code == 404:
+            return None
         resp.raise_for_status()
-        rows = resp.json()
-        return rows[0]["html"] if rows else None
+        data = resp.json()
+        encoded = data.get("content", "")
+        return base64.b64decode(encoded).decode("utf-8")
     except Exception:
         return None
 
 
-def _save_report_to_cloud(date_key: str, html: str) -> None:
-    if not _supabase_enabled() or _is_broken_html(html):
+def _save_report_to_github(date_key: str, html: str) -> None:
+    if not _github_enabled() or _is_broken_html(html):
         return
+
+    path = f"reports/report_{date_key}.html"
+    sha = None
+
     try:
-        httpx.post(
-            _supabase_url("reports"),
-            headers=_supabase_headers("resolution=merge-duplicates"),
-            json={"report_date": date_key, "html": html},
-            timeout=20,
+        existing = httpx.get(
+            _github_contents_url(path),
+            headers=_github_headers(),
+            params={"ref": GITHUB_BRANCH},
+            timeout=15,
+        )
+        if existing.status_code == 200:
+            sha = existing.json().get("sha")
+    except Exception:
+        sha = None
+
+    payload = {
+        "message": f"Add news report {date_key}",
+        "content": base64.b64encode(html.encode("utf-8")).decode("ascii"),
+        "branch": GITHUB_BRANCH,
+    }
+    if sha:
+        payload["sha"] = sha
+
+    try:
+        httpx.put(
+            _github_contents_url(path),
+            headers=_github_headers(),
+            json=payload,
+            timeout=30,
         ).raise_for_status()
     except Exception:
         pass
@@ -271,7 +260,7 @@ def _latest_report_date() -> str | None:
 def _has_today_report() -> bool:
     today_key = datetime.now(tz=KST).strftime("%Y%m%d")
 
-    html = _cloud_report_html(today_key)
+    html = _github_report_html(today_key)
     if html and not _is_broken_html(html):
         return True
 
@@ -335,7 +324,7 @@ def _run_pipeline() -> None:
         md_reporter.generate(category_data, trends, REPORTS_DIR)
         date_key = datetime.now(tz=KST).strftime("%Y%m%d")
         html = html_path.read_text(encoding="utf-8")
-        _save_report_to_cloud(date_key, html)
+        _save_report_to_github(date_key, html)
 
         with _lock:
             _state["steps_done"] = 4
@@ -384,7 +373,9 @@ def debug():
             "latest": latest,
             "has_today_report": _has_today_report(),
             "subscriptions": len(_subscriptions),
-            "supabase_enabled": _supabase_enabled(),
+            "github_enabled": _github_enabled(),
+            "github_repo": GITHUB_REPO,
+            "github_branch": GITHUB_BRANCH,
             "has_google_api_key": bool(os.environ.get("GOOGLE_API_KEY")),
             "has_vapid_private_key": bool(os.environ.get("VAPID_PRIVATE_KEY_B64")),
             "has_vapid_public_key": bool(os.environ.get("VAPID_PUBLIC_KEY")),
@@ -449,7 +440,7 @@ def report():
     if not date_key:
         return redirect("/")
 
-    html = _cloud_report_html(date_key)
+    html = _github_report_html(date_key)
     if html:
         return Response(html, mimetype="text/html; charset=utf-8")
 
@@ -472,7 +463,7 @@ def subscribe():
 
     if not any(saved.get("endpoint") == sub["endpoint"] for saved in _subscriptions):
         _subscriptions.append(sub)
-    _save_subscription(sub)
+        _save_subs()
 
     return jsonify({"ok": True})
 
@@ -482,8 +473,7 @@ def unsubscribe():
     endpoint = (request.get_json() or {}).get("endpoint")
     global _subscriptions
     _subscriptions = [sub for sub in _subscriptions if sub.get("endpoint") != endpoint]
-    if endpoint:
-        _delete_subscription(endpoint)
+    _save_subs()
     return jsonify({"ok": True})
 
 
