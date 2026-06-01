@@ -437,6 +437,7 @@
   <div class="tab-list">
     <button class="notif-btn" id="notifBtn" data-notification-button>🔔 알림</button>
     <a class="tab-item" href="/">📅 날짜 선택</a>
+    <a class="tab-item" href="#trend">🔍 트렌드</a>
     {% for cat in categories %}
     <a class="tab-item" href="#cat-{{ cat.id }}">{{ cat.emoji }} {{ cat.name }}</a>
     {% endfor %}
@@ -445,6 +446,17 @@
 </nav>
 
 <main>
+
+  <!-- 트렌드 분석 -->
+  <div class="trend-card" id="trend">
+    <div class="trend-header">
+      <div class="trend-icon">🤖</div>
+      <h2>오늘의 뉴스 트렌드 분석</h2>
+    </div>
+    <div class="trend-body">
+      <div class="trend-content" id="trend-content">{{ trends }}</div>
+    </div>
+  </div>
 
   <!-- 카테고리 그리드 -->
   <div class="section-label">카테고리별 주요 기사 — 제목을 클릭하면 기사가 펼쳐집니다</div>
@@ -583,6 +595,16 @@
     return text;
   }
 
+  function removePrimaryIssueSection(raw) {
+    return raw
+      .replace(/##\s*1\.\s*오늘의 주요\s*(이슈|뉴스)[\s\S]*?(?=##\s*2\.\s*카테고리별 핵심 키워드)/, '')
+      .replace(/##\s*2\.\s*카테고리별 핵심 키워드/g, '## 카테고리별 핵심 키워드')
+      .trim();
+  }
+
+  const tc = document.getElementById('trend-content');
+  if (tc) tc.innerHTML = renderMarkdown(removePrimaryIssueSection(tc.textContent));
+
   /* ── 탭 활성화 (스크롤 위치 기반) ── */
   const tabs = document.querySelectorAll('.tab-item');
   const ioOpts = { threshold: 0.2, rootMargin: '-60px 0px 0px 0px' };
@@ -601,7 +623,7 @@
   }, ioOpts);
 
   document.querySelectorAll('[id]').forEach(el => {
-    if (el.id.startsWith('cat-')) io.observe(el);
+    if (el.id === 'trend' || el.id.startsWith('cat-')) io.observe(el);
   });
 </script>
 <script src="/static/notifications.js"></script>

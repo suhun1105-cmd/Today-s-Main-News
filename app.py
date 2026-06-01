@@ -253,6 +253,12 @@ def _github_report_html(date_key: str) -> str | None:
 def _prepare_report_html(html: str) -> str:
     html = html.replace(' onclick="toggleNotif()"', "")
     html = html.replace(" onclick='toggleNotif()'", "")
+    html = re.sub(
+        r"##\s*1\.\s*오늘의 주요\s*(이슈|뉴스)[\s\S]*?(?=##\s*2\.\s*카테고리별 핵심 키워드)",
+        "",
+        html,
+    )
+    html = re.sub(r"##\s*2\.\s*카테고리별 핵심 키워드", "## 카테고리별 핵심 키워드", html)
 
     if "data-notification-status" not in html and "</nav>" in html:
         html = html.replace(
