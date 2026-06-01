@@ -198,7 +198,8 @@
     .trend-content tbody tr:nth-child(6) td:first-child { color: #0e7490; }
 
     /* 인라인 코드 → 키워드 뱃지 */
-    .trend-content code {
+    .trend-content code,
+    .trend-content .keyword-link {
       display: inline-block;
       background: rgba(255,255,255,.72);
       color: #334155;
@@ -211,12 +212,29 @@
       white-space: nowrap;
       vertical-align: middle;
     }
-    .trend-content tbody tr:nth-child(1) code { color: #1d4ed8; border-color: #93c5fd; }
-    .trend-content tbody tr:nth-child(2) code { color: #15803d; border-color: #86efac; }
-    .trend-content tbody tr:nth-child(3) code { color: #c2410c; border-color: #fdba74; }
-    .trend-content tbody tr:nth-child(4) code { color: #be185d; border-color: #f9a8d4; }
-    .trend-content tbody tr:nth-child(5) code { color: #6d28d9; border-color: #c4b5fd; }
-    .trend-content tbody tr:nth-child(6) code { color: #0e7490; border-color: #67e8f9; }
+    .trend-content .keyword-link {
+      cursor: pointer;
+      transition: transform .14s ease, box-shadow .14s ease, background .14s ease;
+    }
+    .trend-content .keyword-link:hover,
+    .trend-content .keyword-link:focus-visible {
+      background: #fff;
+      box-shadow: 0 4px 10px rgba(15,23,42,.12);
+      transform: translateY(-1px);
+      outline: none;
+    }
+    .trend-content tbody tr:nth-child(1) code,
+    .trend-content tbody tr:nth-child(1) .keyword-link { color: #1d4ed8; border-color: #93c5fd; }
+    .trend-content tbody tr:nth-child(2) code,
+    .trend-content tbody tr:nth-child(2) .keyword-link { color: #15803d; border-color: #86efac; }
+    .trend-content tbody tr:nth-child(3) code,
+    .trend-content tbody tr:nth-child(3) .keyword-link { color: #c2410c; border-color: #fdba74; }
+    .trend-content tbody tr:nth-child(4) code,
+    .trend-content tbody tr:nth-child(4) .keyword-link { color: #be185d; border-color: #f9a8d4; }
+    .trend-content tbody tr:nth-child(5) code,
+    .trend-content tbody tr:nth-child(5) .keyword-link { color: #6d28d9; border-color: #c4b5fd; }
+    .trend-content tbody tr:nth-child(6) code,
+    .trend-content tbody tr:nth-child(6) .keyword-link { color: #0e7490; border-color: #67e8f9; }
 
     /* 트렌드 테이블 첫 열(카테고리) 고정 너비 */
     .trend-content td:first-child,
@@ -456,7 +474,7 @@
   <div class="section-label">카테고리별 주요 기사 — 제목을 클릭하면 기사가 펼쳐집니다</div>
   <div class="category-grid">
     {% for cat in categories %}
-    <div class="cat-card" id="cat-{{ cat.id }}">
+    <div class="cat-card" id="cat-{{ cat.id }}" data-cat-name="{{ cat.name }}">
 
       <!-- 클릭 가능한 헤더 -->
       <div class="cat-header" onclick="toggleCat(this)">
@@ -479,7 +497,7 @@
             <div class="article-row">
             {% for article in cat.articles %}
             {% set an = article.analysis if article.analysis is defined else {} %}
-            <div class="article-item">
+            <div class="article-item" id="cat-{{ cat.id }}-article-{{ loop.index }}">
               <div class="article-title-row">
                 <span class="art-num">{{ loop.index }}</span>
                 <a class="art-title" href="{{ article.link }}" target="_blank" rel="noopener">
@@ -494,7 +512,7 @@
                 </div>
                 {% endif %}
                 {% if an and an.explanation %}
-                <div class="art-block art-block-explain">
+                <div class="art-block art-block-explain" id="cat-{{ cat.id }}-article-{{ loop.index }}-explain">
                   <div class="art-label label-explain">📖 기사 설명</div>
                   <p class="art-text">{{ an.explanation }}</p>
                 </div>
@@ -534,7 +552,7 @@
     text = text.replace(/^# (.+)$/gm,   '<h1>$1</h1>');
 
     // 인라인 코드 → 키워드 뱃지 (backtick) — 테이블 파싱 전에 처리
-    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+    text = text.replace(/`([^`]+)`/g, '<button class="keyword-link" type="button">$1</button>');
 
     // 테이블 파싱 — 줄 단위로 안전하게 처리
     text = (function parseTable(src) {
@@ -597,7 +615,38 @@
   }
 
   const tc = document.getElementById('trend-content');
-  if (tc) tc.innerHTML = renderMarkdown(removePrimaryIssueSection(tc.textContent));
+  if (tc) {
+    tc.innerHTML = renderMarkdown(removePrimaryIssueSection(tc.textContent));
+    bindKeywordLinks();
+  }
+
+  function normalizeCategoryName(value) {
+    return (value || '').replace(/[^\w가-힣/]/g, '').toLowerCase();
+  }
+
+  function findCategoryCard(categoryName) {
+    const normalized = normalizeCategoryName(categoryName);
+    return Array.from(document.querySelectorAll('.cat-card')).find(card => (
+      normalizeCategoryName(card.dataset.catName || card.querySelector('.cat-name')?.textContent).includes(normalized)
+    ));
+  }
+
+  function bindKeywordLinks() {
+    document.querySelectorAll('.trend-content tr').forEach(row => {
+      const categoryName = row.querySelector('td:first-child, th:first-child')?.textContent.trim();
+      const card = findCategoryCard(categoryName);
+      if (!card) return;
+
+      row.querySelectorAll('.keyword-link, code').forEach(keyword => {
+        keyword.setAttribute('title', `${categoryName} 기사 설명으로 이동`);
+        keyword.addEventListener('click', () => {
+          card.classList.add('open');
+          const target = card.querySelector('.art-block-explain') || card;
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+      });
+    });
+  }
 
   /* ── 탭 활성화 (스크롤 위치 기반) ── */
   const tabs = document.querySelectorAll('.tab-item');

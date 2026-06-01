@@ -31,8 +31,39 @@ GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
 REPORT_RETENTION_DAYS = 7
 TREND_COLOR_STYLE = """
 <style id="trend-color-style">
-.trend-content tbody tr:nth-child(1) td{background:#eff6ff!important;border-color:#bfdbfe!important}.trend-content tbody tr:nth-child(2) td{background:#f0fdf4!important;border-color:#bbf7d0!important}.trend-content tbody tr:nth-child(3) td{background:#fff7ed!important;border-color:#fed7aa!important}.trend-content tbody tr:nth-child(4) td{background:#fdf2f8!important;border-color:#fbcfe8!important}.trend-content tbody tr:nth-child(5) td{background:#f5f3ff!important;border-color:#ddd6fe!important}.trend-content tbody tr:nth-child(6) td{background:#ecfeff!important;border-color:#a5f3fc!important}.trend-content tbody tr:nth-child(1) td:first-child,.trend-content tbody tr:nth-child(1) code{color:#1d4ed8!important}.trend-content tbody tr:nth-child(2) td:first-child,.trend-content tbody tr:nth-child(2) code{color:#15803d!important}.trend-content tbody tr:nth-child(3) td:first-child,.trend-content tbody tr:nth-child(3) code{color:#c2410c!important}.trend-content tbody tr:nth-child(4) td:first-child,.trend-content tbody tr:nth-child(4) code{color:#be185d!important}.trend-content tbody tr:nth-child(5) td:first-child,.trend-content tbody tr:nth-child(5) code{color:#6d28d9!important}.trend-content tbody tr:nth-child(6) td:first-child,.trend-content tbody tr:nth-child(6) code{color:#0e7490!important}.trend-content code{background:rgba(255,255,255,.72)!important;border:1px solid rgba(148,163,184,.3)!important}@media(max-width:768px){.trend-content tbody tr:nth-child(1) td:first-child{background:#dbeafe!important}.trend-content tbody tr:nth-child(2) td:first-child{background:#dcfce7!important}.trend-content tbody tr:nth-child(3) td:first-child{background:#ffedd5!important}.trend-content tbody tr:nth-child(4) td:first-child{background:#fce7f3!important}.trend-content tbody tr:nth-child(5) td:first-child{background:#ede9fe!important}.trend-content tbody tr:nth-child(6) td:first-child{background:#cffafe!important}}
+.trend-content tbody tr:nth-child(1) td{background:#eff6ff!important;border-color:#bfdbfe!important}.trend-content tbody tr:nth-child(2) td{background:#f0fdf4!important;border-color:#bbf7d0!important}.trend-content tbody tr:nth-child(3) td{background:#fff7ed!important;border-color:#fed7aa!important}.trend-content tbody tr:nth-child(4) td{background:#fdf2f8!important;border-color:#fbcfe8!important}.trend-content tbody tr:nth-child(5) td{background:#f5f3ff!important;border-color:#ddd6fe!important}.trend-content tbody tr:nth-child(6) td{background:#ecfeff!important;border-color:#a5f3fc!important}.trend-content tbody tr:nth-child(1) td:first-child,.trend-content tbody tr:nth-child(1) code,.trend-content tbody tr:nth-child(1) .keyword-link{color:#1d4ed8!important}.trend-content tbody tr:nth-child(2) td:first-child,.trend-content tbody tr:nth-child(2) code,.trend-content tbody tr:nth-child(2) .keyword-link{color:#15803d!important}.trend-content tbody tr:nth-child(3) td:first-child,.trend-content tbody tr:nth-child(3) code,.trend-content tbody tr:nth-child(3) .keyword-link{color:#c2410c!important}.trend-content tbody tr:nth-child(4) td:first-child,.trend-content tbody tr:nth-child(4) code,.trend-content tbody tr:nth-child(4) .keyword-link{color:#be185d!important}.trend-content tbody tr:nth-child(5) td:first-child,.trend-content tbody tr:nth-child(5) code,.trend-content tbody tr:nth-child(5) .keyword-link{color:#6d28d9!important}.trend-content tbody tr:nth-child(6) td:first-child,.trend-content tbody tr:nth-child(6) code,.trend-content tbody tr:nth-child(6) .keyword-link{color:#0e7490!important}.trend-content code,.trend-content .keyword-link{background:rgba(255,255,255,.72)!important;border:1px solid rgba(148,163,184,.3)!important;cursor:pointer}.trend-content .keyword-link{border-radius:999px;padding:2px 10px;font:inherit;font-size:.78rem;font-weight:600;margin:2px 3px;white-space:nowrap}.trend-content code:hover,.trend-content .keyword-link:hover{background:#fff!important;box-shadow:0 4px 10px rgba(15,23,42,.12)}@media(max-width:768px){.trend-content tbody tr:nth-child(1) td:first-child{background:#dbeafe!important}.trend-content tbody tr:nth-child(2) td:first-child{background:#dcfce7!important}.trend-content tbody tr:nth-child(3) td:first-child{background:#ffedd5!important}.trend-content tbody tr:nth-child(4) td:first-child{background:#fce7f3!important}.trend-content tbody tr:nth-child(5) td:first-child{background:#ede9fe!important}.trend-content tbody tr:nth-child(6) td:first-child{background:#cffafe!important}}
 </style>
+"""
+KEYWORD_LINK_SCRIPT = """
+<script id="keyword-link-script">
+(function(){
+  function norm(v){return (v||'').replace(/[^\\w가-힣/]/g,'').toLowerCase();}
+  function cardFor(name){
+    const n=norm(name);
+    return Array.from(document.querySelectorAll('.cat-card')).find(card=>{
+      const label=card.dataset.catName||card.querySelector('.cat-name')?.textContent||'';
+      return norm(label).includes(n);
+    });
+  }
+  function bind(){
+    document.querySelectorAll('.trend-content tr').forEach(row=>{
+      const name=row.querySelector('td:first-child,th:first-child')?.textContent.trim();
+      const card=cardFor(name);
+      if(!card)return;
+      row.querySelectorAll('code,.keyword-link').forEach(el=>{
+        if(el.dataset.keywordBound)return;
+        el.dataset.keywordBound='1';
+        el.setAttribute('title', name+' 기사 설명으로 이동');
+        el.addEventListener('click',()=>{
+          card.classList.add('open');
+          (card.querySelector('.art-block-explain')||card).scrollIntoView({behavior:'smooth',block:'center'});
+        });
+      });
+    });
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
+})();
+</script>
 """
 
 app = Flask(__name__, template_folder="templates")
@@ -277,6 +308,8 @@ def _prepare_report_html(html: str) -> str:
     html = re.sub(r"##\s*2\.\s*카테고리별 핵심 키워드", "## 카테고리별 핵심 키워드", html)
     if "trend-color-style" not in html and "</head>" in html:
         html = html.replace("</head>", f"{TREND_COLOR_STYLE}\n</head>", 1)
+    if "keyword-link-script" not in html and "</body>" in html:
+        html = html.replace("</body>", f"{KEYWORD_LINK_SCRIPT}\n</body>", 1)
 
     return html
 
