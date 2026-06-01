@@ -6,11 +6,13 @@ import sys
 import threading
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
+import httpx
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
-from flask import Flask, jsonify, redirect, render_template, request, send_file
+from flask import Flask, Response, jsonify, redirect, render_template, request, send_file
 
 load_dotenv()
 sys.path.insert(0, str(Path(__file__).parent))
@@ -23,6 +25,9 @@ REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 SUBS_FILE = Path(__file__).resolve().parent / "subscriptions.json"
 KST = ZoneInfo("Asia/Seoul")
 WEEKDAYS_KO = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
 app = Flask(__name__, template_folder="templates")
 
@@ -38,8 +43,62 @@ _state = {
 }
 
 
+def _supabase_enabled() -> bool:
+    return bool(SUPABASE_URL and SUPABASE_KEY)
+
+
+def _supabase_headers(prefer: str | None = None) -> dict:
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+    }
+    if prefer:
+        headers["Prefer"] = prefer
+    return headers
+
+
+def _supabase_url(path: str) -> str:
+    return f"{SUPABASE_URL}/rest/v1/{path}"
+
+
+def _label_for_date(date_key: str) -> str:
+    report_date = datetime.strptime(date_key, "%Y%m%d")
+    weekday = WEEKDAYS_KO[report_date.weekday()]
+    return f"{date_key[:4]}년 {date_key[4:6]}월 {date_key[6:]}일 {weekday}"
+
+
+def _today_label() -> str:
+    now = datetime.now(tz=KST)
+    return f"{now:%Y년 %m월 %d일} {WEEKDAYS_KO[now.weekday()]}"
+
+
+def _is_broken_html(content: str) -> bool:
+    broken_markers = [
+        "models/gemini-1.5-flash is not found",
+        "트렌드 분석을 불러오지 못했습니다",
+        "분석 중 오류가 발생했습니다",
+        "429 You exceeded your current quota",
+    ]
+    return any(marker in content for marker in broken_markers)
+
+
 def _load_subs() -> None:
     global _subscriptions
+
+    if _supabase_enabled():
+        try:
+            resp = httpx.get(
+                _supabase_url("push_subscriptions?select=subscription"),
+                headers=_supabase_headers(),
+                timeout=15,
+            )
+            resp.raise_for_status()
+            _subscriptions = [row["subscription"] for row in resp.json() if row.get("subscription")]
+            return
+        except Exception:
+            _subscriptions = []
+
     if not SUBS_FILE.exists():
         return
     try:
@@ -48,11 +107,43 @@ def _load_subs() -> None:
         _subscriptions = []
 
 
-def _save_subs() -> None:
+def _save_subs_local() -> None:
     try:
         SUBS_FILE.write_text(json.dumps(_subscriptions), encoding="utf-8")
     except Exception:
         pass
+
+
+def _save_subscription(sub: dict) -> None:
+    if _supabase_enabled():
+        try:
+            httpx.post(
+                _supabase_url("push_subscriptions"),
+                headers=_supabase_headers("resolution=merge-duplicates"),
+                json={"endpoint": sub["endpoint"], "subscription": sub},
+                timeout=15,
+            ).raise_for_status()
+            return
+        except Exception:
+            pass
+
+    _save_subs_local()
+
+
+def _delete_subscription(endpoint: str) -> None:
+    if _supabase_enabled():
+        try:
+            encoded = quote(endpoint, safe="")
+            httpx.delete(
+                _supabase_url(f"push_subscriptions?endpoint=eq.{encoded}"),
+                headers=_supabase_headers(),
+                timeout=15,
+            ).raise_for_status()
+            return
+        except Exception:
+            pass
+
+    _save_subs_local()
 
 
 def _send_push(title: str, body: str) -> None:
@@ -83,18 +174,18 @@ def _send_push(title: str, body: str) -> None:
     for sub in expired:
         if sub in _subscriptions:
             _subscriptions.remove(sub)
-    if expired:
-        _save_subs()
+        if sub.get("endpoint"):
+            _delete_subscription(sub["endpoint"])
 
 
-def _report_path_for_date(date_key: str) -> Path | None:
+def _local_report_path_for_date(date_key: str) -> Path | None:
     if not re.fullmatch(r"\d{8}", date_key or ""):
         return None
     path = REPORTS_DIR / f"report_{date_key}.html"
     return path if path.exists() else None
 
 
-def _report_entries() -> list[dict]:
+def _local_report_entries() -> list[dict]:
     if not REPORTS_DIR.exists():
         return []
 
@@ -104,46 +195,94 @@ def _report_entries() -> list[dict]:
         if not match:
             continue
         date_key = match.group(1)
-        report_date = datetime.strptime(date_key, "%Y%m%d")
-        weekday = WEEKDAYS_KO[report_date.weekday()]
-        label = f"{date_key[:4]}년 {date_key[4:6]}월 {date_key[6:]}일 {weekday}"
-        entries.append({"date": date_key, "label": label, "path": str(path)})
+        entries.append(
+            {"date": date_key, "label": _label_for_date(date_key), "source": "local"}
+        )
     return entries
 
 
-def _today_label() -> str:
-    now = datetime.now(tz=KST)
-    weekday = WEEKDAYS_KO[now.weekday()]
-    return now.strftime(f"%Y년 %m월 %d일 {weekday}")
+def _cloud_report_entries() -> list[dict]:
+    if not _supabase_enabled():
+        return []
+    try:
+        resp = httpx.get(
+            _supabase_url("reports?select=report_date&order=report_date.desc"),
+            headers=_supabase_headers(),
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return [
+            {
+                "date": row["report_date"],
+                "label": _label_for_date(row["report_date"]),
+                "source": "supabase",
+            }
+            for row in resp.json()
+            if row.get("report_date")
+        ]
+    except Exception:
+        return []
 
 
-def _latest_report_path() -> Path | None:
-    entries = _report_entries()
-    if not entries:
+def _report_entries() -> list[dict]:
+    merged: dict[str, dict] = {}
+    for entry in _local_report_entries():
+        merged[entry["date"]] = entry
+    for entry in _cloud_report_entries():
+        merged[entry["date"]] = entry
+    return sorted(merged.values(), key=lambda item: item["date"], reverse=True)
+
+
+def _cloud_report_html(date_key: str) -> str | None:
+    if not _supabase_enabled() or not re.fullmatch(r"\d{8}", date_key or ""):
         return None
-    return _report_path_for_date(entries[0]["date"])
+    try:
+        resp = httpx.get(
+            _supabase_url(f"reports?report_date=eq.{date_key}&select=html&limit=1"),
+            headers=_supabase_headers(),
+            timeout=15,
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        return rows[0]["html"] if rows else None
+    except Exception:
+        return None
 
 
-def _is_broken_report(path: Path) -> bool:
+def _save_report_to_cloud(date_key: str, html: str) -> None:
+    if not _supabase_enabled() or _is_broken_html(html):
+        return
+    try:
+        httpx.post(
+            _supabase_url("reports"),
+            headers=_supabase_headers("resolution=merge-duplicates"),
+            json={"report_date": date_key, "html": html},
+            timeout=20,
+        ).raise_for_status()
+    except Exception:
+        pass
+
+
+def _latest_report_date() -> str | None:
+    entries = _report_entries()
+    return entries[0]["date"] if entries else None
+
+
+def _has_today_report() -> bool:
+    today_key = datetime.now(tz=KST).strftime("%Y%m%d")
+
+    html = _cloud_report_html(today_key)
+    if html and not _is_broken_html(html):
+        return True
+
+    path = _local_report_path_for_date(today_key)
+    if not path:
+        return False
     try:
         content = path.read_text(encoding="utf-8", errors="ignore")
     except Exception:
         return False
-
-    broken_markers = [
-        "models/gemini-1.5-flash is not found",
-        "트렌드 분석을 불러오지 못했습니다",
-        "분석 중 오류가 발생했습니다",
-        "429 You exceeded your current quota",
-    ]
-    return any(marker in content for marker in broken_markers)
-
-
-def _has_today_report(path: Path) -> bool:
-    if _is_broken_report(path):
-        return False
-    mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=KST)
-    return mtime.date() == datetime.now(tz=KST).date()
+    return not _is_broken_html(content)
 
 
 def _run_pipeline() -> None:
@@ -194,6 +333,9 @@ def _run_pipeline() -> None:
 
         html_path = html_reporter.generate(category_data, trends, REPORTS_DIR)
         md_reporter.generate(category_data, trends, REPORTS_DIR)
+        date_key = datetime.now(tz=KST).strftime("%Y%m%d")
+        html = html_path.read_text(encoding="utf-8")
+        _save_report_to_cloud(date_key, html)
 
         with _lock:
             _state["steps_done"] = 4
@@ -219,8 +361,7 @@ def _scheduled_run() -> None:
         if _state["running"]:
             return
 
-    path = _latest_report_path()
-    if path and _has_today_report(path):
+    if _has_today_report():
         return
 
     threading.Thread(target=_run_pipeline, daemon=True).start()
@@ -234,15 +375,16 @@ scheduler.start()
 
 @app.route("/debug")
 def debug():
-    latest = _latest_report_path()
+    latest = _latest_report_date()
     return jsonify(
         {
             "reports_dir": str(REPORTS_DIR),
             "reports_dir_exists": REPORTS_DIR.exists(),
             "reports": _report_entries(),
-            "latest": str(latest) if latest else None,
-            "has_today_report": bool(latest and _has_today_report(latest)),
+            "latest": latest,
+            "has_today_report": _has_today_report(),
             "subscriptions": len(_subscriptions),
+            "supabase_enabled": _supabase_enabled(),
             "has_google_api_key": bool(os.environ.get("GOOGLE_API_KEY")),
             "has_vapid_private_key": bool(os.environ.get("VAPID_PRIVATE_KEY_B64")),
             "has_vapid_public_key": bool(os.environ.get("VAPID_PUBLIC_KEY")),
@@ -303,8 +445,15 @@ def status():
 
 @app.route("/report")
 def report():
-    date_key = request.args.get("date", "")
-    path = _report_path_for_date(date_key) if date_key else _latest_report_path()
+    date_key = request.args.get("date") or _latest_report_date()
+    if not date_key:
+        return redirect("/")
+
+    html = _cloud_report_html(date_key)
+    if html:
+        return Response(html, mimetype="text/html; charset=utf-8")
+
+    path = _local_report_path_for_date(date_key)
     if not path:
         return redirect("/")
     return send_file(path)
@@ -323,7 +472,7 @@ def subscribe():
 
     if not any(saved.get("endpoint") == sub["endpoint"] for saved in _subscriptions):
         _subscriptions.append(sub)
-        _save_subs()
+    _save_subscription(sub)
 
     return jsonify({"ok": True})
 
@@ -333,29 +482,24 @@ def unsubscribe():
     endpoint = (request.get_json() or {}).get("endpoint")
     global _subscriptions
     _subscriptions = [sub for sub in _subscriptions if sub.get("endpoint") != endpoint]
-    _save_subs()
+    if endpoint:
+        _delete_subscription(endpoint)
     return jsonify({"ok": True})
 
 
 @app.route("/trigger")
 def trigger():
-    # UptimeRobot keep-alive endpoint.
-    # Without force=1 it must not create a report, otherwise it can run before
-    # the 9 AM scheduled job and make the real schedule skip.
     force = request.args.get("force")
     if not force:
-        return jsonify({
-            "ok": True,
-            "msg": "awake",
-            "now_kst": datetime.now(tz=KST).isoformat(),
-        })
+        return jsonify(
+            {"ok": True, "msg": "awake", "now_kst": datetime.now(tz=KST).isoformat()}
+        )
 
     with _lock:
         if _state["running"]:
             return jsonify({"ok": False, "msg": "already running"})
 
-    path = _latest_report_path()
-    if path and _has_today_report(path):
+    if _has_today_report():
         return jsonify({"ok": False, "msg": "today report already exists"})
 
     threading.Thread(target=_run_pipeline, daemon=True).start()
