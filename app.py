@@ -585,7 +585,7 @@ def trigger():
         if _state["running"]:
             return jsonify({"ok": False, "msg": "already running"})
 
-    if _has_today_report():
+    if request.args.get("skip_existing") == "1" and _has_today_report():
         return jsonify({"ok": False, "msg": "today report already exists"})
 
     threading.Thread(target=_run_pipeline, daemon=True).start()
