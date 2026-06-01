@@ -553,13 +553,17 @@ def subscribe():
         _subscriptions.append(sub)
         _save_subs()
 
-    test_sent, _ = _send_push_to_subscription(
-        sub,
-        "알림 설정 완료",
-        "이제 매일 오전 9시 뉴스 리포트가 생성되면 알림을 보내드릴게요.",
-    )
+    threading.Thread(
+        target=_send_push_to_subscription,
+        args=(
+            sub,
+            "알림 설정 완료",
+            "이제 매일 오전 9시 뉴스 리포트가 생성되면 알림을 보내드릴게요.",
+        ),
+        daemon=True,
+    ).start()
 
-    return jsonify({"ok": True, "test_sent": test_sent})
+    return jsonify({"ok": True, "test_queued": True})
 
 
 @app.route("/unsubscribe", methods=["POST"])
