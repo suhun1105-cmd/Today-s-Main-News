@@ -67,8 +67,16 @@
 
   async function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return null;
-    const registration = await navigator.serviceWorker.register('/static/sw.js');
-    await navigator.serviceWorker.ready;
+    const registration = await withTimeout(
+      navigator.serviceWorker.register('/static/sw.js', { updateViaCache: 'none' }),
+      10000,
+      '서비스워커 등록 시간이 초과되었습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.',
+    );
+    await withTimeout(
+      navigator.serviceWorker.ready,
+      10000,
+      '서비스워커 준비 시간이 초과되었습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.',
+    );
     return registration;
   }
 
@@ -99,6 +107,7 @@
       return;
     }
 
+    alert('알림 설정을 시작합니다.\n권한 요청이 나오면 허용을 눌러주세요.');
     setBusy(true);
     setStatus('알림 권한을 확인하는 중입니다...');
 
@@ -115,7 +124,11 @@
       }
 
       setStatus('알림 설정을 준비하는 중입니다...');
-      const keyResponse = await fetch('/vapid-public-key', { cache: 'no-store' });
+      const keyResponse = await withTimeout(
+        fetch('/vapid-public-key', { cache: 'no-store' }),
+        10000,
+        '알림 서버 설정을 불러오지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.',
+      );
       const keyData = await keyResponse.json();
       if (!keyData.key) {
         throw new Error('서버에 VAPID_PUBLIC_KEY가 설정되어 있지 않습니다.');
