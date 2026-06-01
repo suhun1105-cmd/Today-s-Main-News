@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Today's Main News</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=Inter:wght@600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f1f4f9;
+      --surface: #ffffff;
+      --surface2: #f8fafc;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --text-light: #94a3b8;
+      --accent: #16a34a;
+      --accent-dark: #15803d;
+      --accent-light: #f0fdf4;
+      --accent-border: #bbf7d0;
+      --summary-bg: #f0f9ff;
+      --summary-border: #bae6fd;
+      --explain-bg: #fffbeb;
+      --explain-border: #fde68a;
+      --radius-lg: 16px;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --shadow: 0 1px 4px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.06);
+      --shadow-lg: 0 4px 20px rgba(0,0,0,.10), 0 1px 4px rgba(0,0,0,.06);
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: "Noto Sans KR", "Apple SD Gothic Neo", -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    /* ── HEADER ─────────────────────────────── */
+    .site-header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #334155 100%);
+      color: #fff;
+      padding: 40px 32px 32px;
+      position: relative;
+      overflow: hidden;
+    }
+    .site-header::before {
+      content: "";
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 80% 50%, rgba(22,163,74,.15) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .header-inner { max-width: 1200px; margin: 0 auto; position: relative; }
+    .header-eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-family: "Inter", sans-serif;
+      font-size: 0.7rem; font-weight: 700; letter-spacing: .14em;
+      text-transform: uppercase; color: #86efac;
+      margin-bottom: 14px;
+    }
+    .eyebrow-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #4ade80; animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; } 50% { opacity: .4; }
+    }
+    .site-header h1 {
+      font-family: "Inter", sans-serif;
+      font-size: clamp(1.8rem, 5vw, 2.8rem);
+      font-weight: 700; letter-spacing: -.03em;
+      line-height: 1.15; color: #fff;
+    }
+    .header-sub {
+      font-size: 0.88rem; color: #94a3b8;
+      margin-top: 6px; font-weight: 400;
+    }
+    .header-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 999px; padding: 5px 13px;
+      font-size: 0.75rem; font-weight: 500; color: #cbd5e1;
+    }
+
+    /* ── STICKY TAB BAR ─────────────────────── */
+    .tab-bar {
+      position: sticky; top: 0; z-index: 100;
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+      overflow-x: auto; scrollbar-width: none;
+    }
+    .tab-bar::-webkit-scrollbar { display: none; }
+    .tab-list {
+      display: flex; max-width: 1200px;
+      margin: 0 auto; padding: 0 20px;
+      white-space: nowrap;
+    }
+    .tab-item {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 13px 16px;
+      font-size: 0.8rem; font-weight: 600;
+      color: var(--text-muted);
+      text-decoration: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color .15s, border-color .15s;
+      white-space: nowrap;
+    }
+    .tab-item:hover { color: var(--accent-dark); border-bottom-color: var(--accent); }
+    .tab-item.active { color: var(--accent-dark); border-bottom-color: var(--accent); }
+
+    /* ── MAIN ───────────────────────────────── */
+    main { max-width: 1200px; margin: 0 auto; padding: 28px 20px 64px; }
+
+    /* ── TREND CARD ─────────────────────────── */
+    .trend-card {
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      margin-bottom: 32px;
+    }
+    .trend-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 15px 22px;
+      background: var(--accent-light);
+      border-bottom: 1px solid var(--accent-border);
+    }
+    .trend-icon {
+      width: 32px; height: 32px; background: var(--accent);
+      border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.95rem; flex-shrink: 0;
+    }
+    .trend-header h2 { font-size: 0.92rem; font-weight: 700; color: var(--accent-dark); }
+    .trend-body { padding: 22px 24px; }
+
+    /* trend 마크다운 스타일 */
+    .trend-content { font-size: 0.88rem; color: var(--text); }
+
+    .trend-content h2 {
+      font-size: 0.95rem; font-weight: 700; color: var(--accent-dark);
+      padding: 8px 14px;
+      background: var(--accent-light);
+      border-left: 4px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      margin: 20px 0 12px;
+    }
+    .trend-content h2:first-child { margin-top: 0; }
+    .trend-content h3 {
+      font-size: 0.88rem; font-weight: 700; color: var(--accent-dark);
+      margin: 12px 0 5px;
+    }
+    .trend-content p { margin-bottom: 8px; line-height: 1.8; }
+    .trend-content ul { padding-left: 18px; margin-bottom: 8px; }
+    .trend-content li { margin-bottom: 5px; line-height: 1.7; }
+    .trend-content strong { font-weight: 700; }
+    .trend-content hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+
+    /* 키워드 테이블 */
+    .trend-content table {
+      width: 100%; border-collapse: collapse;
+      margin: 10px 0 14px; font-size: 0.85rem;
+    }
+    .trend-content th {
+      background: var(--accent-light);
+      color: var(--accent-dark);
+      font-weight: 700; font-size: 0.75rem;
+      text-align: left; padding: 8px 12px;
+      border: 1px solid var(--accent-border);
+    }
+    .trend-content td {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      vertical-align: middle;
+      line-height: 1.6;
+    }
+    .trend-content tr:nth-child(even) td { background: var(--surface2); }
+
+    /* 인라인 코드 → 키워드 뱃지 */
+    .trend-content code {
+      display: inline-block;
+      background: var(--accent-light);
+      color: var(--accent-dark);
+      border: 1px solid var(--accent-border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 0.78rem; font-weight: 600;
+      font-family: inherit;
+      margin: 2px 3px;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+
+    /* 트렌드 테이블 첫 열(카테고리) 고정 너비 */
+    .trend-content td:first-child,
+    .trend-content th:first-child {
+      white-space: nowrap;
+      width: 120px;
+      font-weight: 600;
+    }
+
+    /* 모바일: 트렌드 테이블 → 카드 형태로 전환 */
+    @media (max-width: 768px) {
+      .trend-content table { display: block; }
+      .trend-content thead { display: none; }
+      .trend-content tbody { display: flex; flex-direction: column; gap: 8px; }
+      .trend-content tr {
+        display: flex;
+        flex-direction: column;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .trend-content td {
+        display: block;
+        border: none;
+        padding: 7px 12px;
+        width: auto;
+        white-space: normal;
+      }
+      .trend-content td:first-child {
+        background: var(--accent-light);
+        color: var(--accent-dark);
+        font-weight: 700;
+        font-size: 0.82rem;
+        padding: 8px 12px 6px;
+        border-bottom: 1px solid var(--accent-border);
+        width: auto;
+      }
+      .trend-content td:last-child {
+        padding: 8px 12px;
+        line-height: 2;
+      }
+      .trend-content tr:nth-child(even) td { background: inherit; }
+      .trend-content tr:nth-child(even) td:first-child { background: var(--accent-light); }
+    }
+
+    /* ── CATEGORY SECTION LABEL ─────────────── */
+    .section-label {
+      font-size: 0.72rem; font-weight: 700;
+      letter-spacing: .1em; text-transform: uppercase;
+      color: var(--text-light); margin-bottom: 14px;
+    }
+
+    /* ── CATEGORY GRID ──────────────────────── */
+    .category-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* ── CATEGORY CARD (accordion) ──────────── */
+    .cat-card {
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    /* 카테고리 헤더 — 클릭 가능 */
+    .cat-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 18px;
+      cursor: pointer;
+      user-select: none;
+      background: var(--surface);
+      border-bottom: 2px solid transparent;
+      transition: background .15s, border-color .15s;
+    }
+    .cat-header:hover { background: var(--accent-light); border-bottom-color: var(--accent); }
+    .cat-card.open .cat-header {
+      background: var(--accent-light);
+      border-bottom-color: var(--accent);
+    }
+
+    .cat-emoji { font-size: 1.1rem; }
+    .cat-name { font-weight: 700; font-size: 0.93rem; color: var(--text); flex: 1; }
+    .cat-count {
+      font-size: 0.66rem; font-weight: 700;
+      background: var(--border); color: var(--text-muted);
+      border-radius: 999px; padding: 2px 8px;
+      transition: background .15s, color .15s;
+    }
+    .cat-card.open .cat-count { background: var(--accent); color: #fff; }
+    .cat-card.open .cat-name { color: var(--accent-dark); }
+
+    /* 화살표 */
+    .cat-chevron {
+      width: 18px; height: 18px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-light);
+      transition: transform .25s, color .15s;
+    }
+    .cat-card.open .cat-chevron { transform: rotate(180deg); color: var(--accent); }
+    .cat-chevron svg { width: 14px; height: 14px; }
+
+    /* 아코디언 바디 */
+    .cat-body {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows .3s ease;
+    }
+    .cat-card.open .cat-body { grid-template-rows: 1fr; }
+    .cat-body-inner { overflow: hidden; }
+
+    /* 기사 3개 가로 배치 — 데스크탑 */
+    .article-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── ARTICLE ITEM ───────────────────────── */
+    .article-item {
+      padding: 16px 18px;
+      border-right: 1px solid var(--border);
+    }
+    .article-item:last-child { border-right: none; }
+
+    /* 모바일: 1열로 전환 */
+    @media (max-width: 768px) {
+      .article-row {
+        grid-template-columns: 1fr;
+      }
+      .article-item {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+      .article-item:last-child { border-bottom: none; }
+    }
+
+    .article-title-row {
+      display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px;
+    }
+    .art-num {
+      flex-shrink: 0; width: 22px; height: 22px;
+      background: var(--accent); color: #fff;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.68rem; font-weight: 700; margin-top: 2px;
+    }
+    .art-title {
+      font-size: 0.9rem; font-weight: 700;
+      line-height: 1.45; color: var(--text);
+      text-decoration: none; word-break: keep-all;
+    }
+    .art-title:hover { color: var(--accent-dark); text-decoration: underline; }
+
+    .art-blocks { display: flex; flex-direction: column; gap: 8px; }
+
+    .art-block { border-radius: var(--radius-sm); padding: 11px 14px; }
+    .art-block-summary { background: var(--summary-bg); border: 1px solid var(--summary-border); }
+    .art-block-explain { background: var(--explain-bg); border: 1px solid var(--explain-border); }
+
+    .art-label {
+      font-size: 0.68rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .06em;
+      margin-bottom: 5px;
+    }
+    .label-summary { color: #0369a1; }
+    .label-explain { color: #92400e; }
+    .art-text { font-size: 0.83rem; line-height: 1.72; color: #1e293b; word-break: keep-all; }
+
+    .cat-error { padding: 18px; font-size: 0.82rem; color: #dc2626; }
+
+    /* ── FOOTER ─────────────────────────────── */
+    .site-footer {
+      text-align: center; padding: 26px 20px;
+      font-size: 0.76rem; color: var(--text-light);
+      border-top: 1px solid var(--border);
+    }
+    .site-footer strong { color: var(--text-muted); }
+
+    /* 알림 버튼 */
+    .notif-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 13px 16px;
+      font-size: 0.8rem; font-weight: 600;
+      color: var(--text-muted);
+      background: none; border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      cursor: pointer; font-family: inherit;
+      white-space: nowrap;
+      transition: color .15s, border-color .15s;
+    }
+    .notif-btn:hover { color: var(--accent-dark); border-bottom-color: var(--accent); }
+    .notif-btn.subscribed { color: var(--accent-dark); border-bottom-color: var(--accent); }
+
+    @media (max-width: 600px) {
+      .site-header { padding: 28px 18px 24px; }
+      main { padding: 20px 14px 48px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header class="site-header">
+  <div class="header-inner">
+    <div class="header-eyebrow">
+      <span class="eyebrow-dot"></span> Live · AI News Digest
+    </div>
+    <h1>Today's Main News</h1>
+    <p class="header-sub">AI-Powered Daily News Analysis &nbsp;—&nbsp; 2026년 06월 01일</p>
+    <div class="header-pills">
+      <span class="pill">📂 6 Categories</span>
+      <span class="pill">📰 18 Articles Analyzed</span>
+      <span class="pill">🤖 Powered by Claude AI</span>
+    </div>
+  </div>
+</header>
+
+<!-- ── STICKY TAB BAR ── -->
+<nav class="tab-bar">
+  <div class="tab-list">
+    <button class="notif-btn" id="notifBtn" onclick="toggleNotif()">🔔 알림</button>
+    <a class="tab-item" href="/">📅 날짜 선택</a>
+    <a class="tab-item" href="#trend">🔍 트렌드</a>
+    
+    <a class="tab-item" href="#cat-100">🏛️ 정치</a>
+    
+    <a class="tab-item" href="#cat-101">💰 경제</a>
+    
+    <a class="tab-item" href="#cat-102">🏙️ 사회</a>
+    
+    <a class="tab-item" href="#cat-103">🎨 생활/문화</a>
+    
+    <a class="tab-item" href="#cat-104">🌍 세계</a>
+    
+    <a class="tab-item" href="#cat-105">🔬 IT/과학</a>
+    
+  </div>
+</nav>
+
+<main>
+
+  <!-- 트렌드 분석 -->
+  <div class="trend-card" id="trend">
+    <div class="trend-header">
+      <div class="trend-icon">🤖</div>
+      <h2>오늘의 뉴스 트렌드 분석</h2>
+    </div>
+    <div class="trend-body">
+      <div class="trend-content" id="trend-content">## 1. 오늘의 주요 이슈
+| 정치 | 정원오·오세훈 후보의 선거 막판 총력전과 이재명 대표의 국정 지지도 하락이 주요 이슈입니다. |
+| 경제 | 5월 수출액이 역대 최대치를 기록했으며, 특히 반도체 수출이 크게 증가하여 경제 성장을 견인했습니다. |
+| 사회 | 종합특검의 '계엄 정당화 메시지' 2차 소환과 백화점 천장 누수 사고, 불법 식품 제조 적발 소식이 있었습니다. |
+| 생활/문화 | 세계 최초로 한 사람에게 돼지 장기 3개 동시 이식 성공 소식과 함께 한여름 더위 및 장미축제 절정 소식이 전해졌습니다. |
+| 세계 | 트럼프 전 대통령의 이란 종전MOU 불승인 및 이란 대통령 사임설 등 중동 정세 불안이 주요 이슈입니다. |
+| IT/과학 | 카카오 노조의 부분 파업 예고와 애플의 차세대 안경형 기기 출시설, 서울반도체의 글로벌 완성차 공급 소식이 있습니다. |
+
+## 2. 카테고리별 핵심 키워드
+| 정치 | `선거` `지지율` `부동산탈세` |
+| 경제 | `수출` `반도체` `화재` `AI전장` `편의점할인` |
+| 사회 | `특검` `누수사고` `불법식품` |
+| 생활/문화 | `이종장기이식` `날씨` `장미축제` |
+| 세계 | `트럼프` `이란` `공습` |
+| IT/과학 | `카카오노조` `애플안경` `서울반도체` |</div>
+    </div>
+  </div>
+
+  <!-- 카테고리 그리드 -->
+  <div class="section-label">카테고리별 주요 기사 — 제목을 클릭하면 기사가 펼쳐집니다</div>
+  <div class="category-grid">
+    
+    <div class="cat-card" id="cat-100">
+
+      <!-- 클릭 가능한 헤더 -->
+      <div class="cat-header" onclick="toggleCat(this)">
+        <span class="cat-emoji">🏛️</span>
+        <span class="cat-name">정치</span>
+        <span class="cat-count">3건</span>
+        <span class="cat-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </span>
+      </div>
+
+      <!-- 접히는 바디 -->
+      <div class="cat-body">
+        <div class="cat-body-inner">
+          
+            <div class="article-row">
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">1</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/057/0001951698" target="_blank" rel="noopener">
+                  "안전 불감증 시장" vs "대통령 허수아비"…정원오·오세훈 막판 '총력전'
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">정원오 후보와 오세훈 후보가 선거 막판까지 치열한 공방을 벌이고 있습니다. 정원오 후보는 오세훈 시장을 '안전 불감증 시장'으로 비판하고, 오세훈 시장은 정원오 후보를 '대통령 허수아비'로 맞받아치며 총력전을 펼치고 있습니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">이번 기사는 선거를 앞두고 두 주요 후보가 서로를 강하게 비판하며 유권자들의 표심을 얻기 위해 마지막까지 애쓰는 모습을 보여줍니다. 각 후보는 상대방의 약점을 공격하며 자신의 강점을 부각하려 노력하고 있습니다. 이는 선거 막판에 흔히 볼 수 있는 치열한 경쟁 양상입니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">2</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/016/0002650460" target="_blank" rel="noopener">
+                  “부동산 탈세 신고 5개월간 780건…수도권 비중 81%”
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">지난 5개월 동안 부동산 탈세 신고가 총 780건 접수되었으며, 이 중 81%가 수도권 지역에서 발생한 것으로 나타났습니다. 이는 부동산 시장의 불법 행위에 대한 감시와 신고가 활발히 이루어지고 있음을 보여줍니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">부동산 시장에서 세금을 제대로 내지 않는 불법 행위가 많이 신고되고 있다는 소식입니다. 특히 집값이 비싸고 거래가 많은 수도권 지역에서 이런 탈세 시도가 집중적으로 발생하고 있어, 정부와 관련 기관이 이에 대한 단속을 강화할 필요가 있음을 시사합니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">3</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/016/0002650470" target="_blank" rel="noopener">
+                  李 국정 지지도 2주 연속 하락…긍정 59.1%, 부정 36.8%
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">이재명 대표의 국정 지지도가 2주 연속 하락세를 보이며 긍정 평가는 59.1%, 부정 평가는 36.8%를 기록했습니다. 이는 최근 정치적 상황과 맞물려 지지율 변동이 나타나고 있음을 보여줍니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">이재명 대표에 대한 국민들의 지지율이 최근 조금씩 떨어지고 있다는 내용입니다. 긍정적으로 평가하는 사람이 여전히 많지만, 부정적으로 보는 시선도 늘어나고 있습니다. 이는 정치 지도자의 지지율이 다양한 요인에 따라 변동할 수 있음을 보여주는 사례입니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            </div>
+          
+        </div>
+      </div>
+    </div>
+    
+    <div class="cat-card" id="cat-101">
+
+      <!-- 클릭 가능한 헤더 -->
+      <div class="cat-header" onclick="toggleCat(this)">
+        <span class="cat-emoji">💰</span>
+        <span class="cat-name">경제</span>
+        <span class="cat-count">5건</span>
+        <span class="cat-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </span>
+      </div>
+
+      <!-- 접히는 바디 -->
+      <div class="cat-body">
+        <div class="cat-body-inner">
+          
+            <div class="article-row">
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">1</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/629/0000503905" target="_blank" rel="noopener">
+                  5월 수출 877억달러…월 기준 역대 최대…반도체 169.4%↑[종합]
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">5월 수출액이 877억 달러를 기록하며 월 기준으로 역대 최대치를 달성했습니다. 특히 반도체 수출이 전년 대비 169.4% 급증하며 전체 수출 증가를 견인했습니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">우리나라가 지난 5월에 물건을 해외로 팔아 벌어들인 돈이 역대 가장 많았다는 기쁜 소식입니다. 특히 컴퓨터나 스마트폰에 들어가는 반도체 수출이 크게 늘어 경제 성장에 큰 도움이 되었습니다. 이는 한국 경제가 다시 활력을 찾고 있음을 보여주는 긍정적인 신호입니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">2</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/018/0006295153" target="_blank" rel="noopener">
+                  현대모비스 인도 첸나이 공장 화재…현대차 현지 생산기지 ‘비상’
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">현대모비스 인도 첸나이 공장에서 화재가 발생하여 현대차의 현지 생산기지에 비상이 걸렸습니다. 이번 화재로 인해 부품 공급 및 생산 차질이 우려되는 상황입니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">현대자동차의 부품을 만드는 현대모비스 인도 공장에서 불이 났다는 안타까운 소식입니다. 이로 인해 인도 현지에서 현대차를 만드는 데 필요한 부품 공급에 문제가 생겨 생산에 차질이 생길 수 있습니다. 빠르게 복구되어 피해가 최소화되기를 바랍니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">3</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/029/0003029450" target="_blank" rel="noopener">
+                  LIG D&A, AI가 지휘하는 미래 전장 공개…무인체계 통합 시연
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">LIG D&A가 인공지능(AI)이 지휘하는 미래 전장 시스템을 공개하고 무인체계 통합 시연을 성공적으로 마쳤습니다. 이는 국방 분야에서 AI 기술의 활용 가능성을 보여주는 중요한 진전입니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">LIG D&A라는 회사가 인공지능(AI)을 이용해 전쟁터에서 로봇이나 무인 장비들을 지휘하는 기술을 선보였습니다. 사람이 직접 위험한 곳에 가지 않고도 AI가 알아서 작전을 수행하는 미래의 전쟁 모습을 보여준 것입니다. 이는 국방 기술이 얼마나 발전하고 있는지를 잘 보여줍니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">4</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/277/0005769894" target="_blank" rel="noopener">
+                  이재현 CJ회장, 美 올리브영 1호점 방문…북미 전략 점검
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">이재현 CJ그룹 회장이 미국 올리브영 1호점을 방문하여 북미 시장 진출 전략을 직접 점검했습니다. 이는 CJ그룹이 글로벌 시장 확장에 박차를 가하고 있음을 시사합니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">CJ그룹의 이재현 회장이 미국에 문을 연 올리브영 매장을 직접 찾아가 사업이 잘 되고 있는지 확인했습니다. 이는 CJ가 한국을 넘어 미국에서도 사업을 크게 키우려고 노력하고 있다는 것을 보여줍니다. 글로벌 시장에서 한국 기업의 활약을 기대해 봅니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">5</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/366/0001168435" target="_blank" rel="noopener">
+                  편의점 3사, 6월 할인전 돌입… 축구·여름 특수 잡는다
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">국내 주요 편의점 3사가 6월을 맞아 대규모 할인 행사에 돌입하며, 다가오는 축구 경기와 여름철 특수를 겨냥하고 있습니다. 다양한 프로모션을 통해 고객 유치에 나설 예정입니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">6월이 되면서 편의점들이 손님을 끌기 위해 대대적인 할인 행사를 시작했습니다. 특히 축구 경기나 더운 여름에 사람들이 편의점을 많이 찾을 것을 예상하고, 이에 맞춰 다양한 할인 상품들을 내놓아 매출을 올리려는 전략입니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            </div>
+          
+        </div>
+      </div>
+    </div>
+    
+    <div class="cat-card" id="cat-102">
+
+      <!-- 클릭 가능한 헤더 -->
+      <div class="cat-header" onclick="toggleCat(this)">
+        <span class="cat-emoji">🏙️</span>
+        <span class="cat-name">사회</span>
+        <span class="cat-count">3건</span>
+        <span class="cat-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </span>
+      </div>
+
+      <!-- 접히는 바디 -->
+      <div class="cat-body">
+        <div class="cat-body-inner">
+          
+            <div class="article-row">
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">1</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/052/0002360480" target="_blank" rel="noopener">
+                  종합특검, '계엄 정당화 메시지' 홍장원 2차 소환 통보
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">종합특검팀이 '계엄 정당화 메시지' 의혹과 관련하여 홍장원 씨에게 2차 소환을 통보했습니다. 이는 해당 사건에 대한 수사가 심화되고 있음을 보여줍니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">특별 검사팀이 '계엄령을 정당화하려는 메시지'를 보냈다는 의혹을 받고 있는 홍장원 씨를 다시 불러 조사하겠다고 알렸습니다. 이는 이 사건이 매우 중요하게 다뤄지고 있으며, 진실을 밝히기 위한 수사가 계속 진행 중임을 의미합니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">2</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/005/0001852079" target="_blank" rel="noopener">
+                  백화점 식품관 천장 누수 사고… 고객·직원 150명 대피
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">한 백화점 식품관에서 천장 누수 사고가 발생하여 고객과 직원 약 150명이 긴급 대피하는 소동이 벌어졌습니다. 다행히 인명 피해는 없는 것으로 알려졌습니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">백화점 지하 식품 코너의 천장에서 물이 새는 사고가 발생해, 그곳에 있던 손님들과 직원들이 안전을 위해 급히 대피했습니다. 다행히 다친 사람은 없다고 합니다. 이런 사고는 언제든 발생할 수 있으니, 시설 안전 점검이 얼마나 중요한지 다시 한번 생각하게 합니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">3</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/052/0002360464" target="_blank" rel="noopener">
+                  무등록 업자들이 '두쫀쿠'·'버터떡' 만들어 팔다 적발
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">식품 제조 허가 없이 '두쫀쿠'와 '버터떡' 등 인기 제품을 만들어 판매하던 무등록 업자들이 당국에 적발되었습니다. 이는 불법 식품 제조 및 유통의 심각성을 보여줍니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">정부 허가 없이 '두쫀쿠'나 '버터떡' 같은 인기 있는 빵이나 떡을 만들어 팔던 사람들이 단속에 걸렸다는 소식입니다. 이런 불법 제조 식품은 위생이나 안전에 문제가 있을 수 있어 소비자들의 주의가 필요합니다. 식품은 반드시 허가받은 곳에서 안전하게 만들어져야 합니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            </div>
+          
+        </div>
+      </div>
+    </div>
+    
+    <div class="cat-card" id="cat-103">
+
+      <!-- 클릭 가능한 헤더 -->
+      <div class="cat-header" onclick="toggleCat(this)">
+        <span class="cat-emoji">🎨</span>
+        <span class="cat-name">생활/문화</span>
+        <span class="cat-count">3건</span>
+        <span class="cat-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </span>
+      </div>
+
+      <!-- 접히는 바디 -->
+      <div class="cat-body">
+        <div class="cat-body-inner">
+          
+            <div class="article-row">
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">1</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/584/0000037842" target="_blank" rel="noopener">
+                  한 사람 몸에 돼지 장기 3개 세계 최초 동시 이식
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">한 환자의 몸에 돼지 장기 3개(심장, 신장, 간 등)를 세계 최초로 동시에 이식하는 수술이 성공적으로 진행되었습니다. 이는 이종 장기 이식 분야의 중요한 진전을 의미합니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">의학계에서 놀라운 일이 일어났습니다. 한 사람의 몸에 돼지의 심장, 신장, 간 등 세 가지 장기를 동시에 이식하는 수술이 세계 최초로 성공했다는 소식입니다. 이는 장기 이식을 기다리는 많은 환자들에게 새로운 희망을 줄 수 있는 매우 중요한 발전입니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">2</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/449/0000347284" target="_blank" rel="noopener">
+                  한여름 더위 계속…남해안·제주 많은 비[날씨]
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">전국적으로 한여름 더위가 이어지는 가운데, 남해안과 제주도 지역에는 많은 비가 내릴 것으로 예보되었습니다. 지역별 기상 변화에 대한 주의가 필요합니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">날씨가 계속해서 한여름처럼 덥다는 소식입니다. 특히 남쪽 바닷가 지역과 제주도에는 비가 많이 올 것으로 예상되니, 이 지역에 계신 분들은 비 피해에 대비하고 외출 시 우산을 꼭 챙기셔야겠습니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">3</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/008/0005365376" target="_blank" rel="noopener">
+                  지금이 가장 예쁠 때…에버랜드 "장미축제, 이번주 절정"
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">에버랜드 장미축제가 이번 주 절정을 맞이할 예정이며, 아름다운 장미꽃들이 만개하여 방문객들에게 최고의 볼거리를 제공할 것으로 기대됩니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">에버랜드에서 열리고 있는 장미축제가 이번 주에 가장 아름다운 모습을 보여줄 것이라고 합니다. 다양한 색깔의 장미꽃들이 활짝 피어 방문객들에게 멋진 추억을 선사할 예정이니, 주말 나들이 계획이 있다면 에버랜드 장미축제를 방문해 보는 것도 좋겠습니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            </div>
+          
+        </div>
+      </div>
+    </div>
+    
+    <div class="cat-card" id="cat-104">
+
+      <!-- 클릭 가능한 헤더 -->
+      <div class="cat-header" onclick="toggleCat(this)">
+        <span class="cat-emoji">🌍</span>
+        <span class="cat-name">세계</span>
+        <span class="cat-count">3건</span>
+        <span class="cat-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </span>
+      </div>
+
+      <!-- 접히는 바디 -->
+      <div class="cat-body">
+        <div class="cat-body-inner">
+          
+            <div class="article-row">
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">1</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/001/0016109860" target="_blank" rel="noopener">
+                  "트럼프 종전MOU  불승인…이란에 합의조건 강화한 수정안 발송"
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">트럼프 전 대통령이 종전MOU를 불승인하고, 이란에 합의 조건을 강화한 수정안을 발송한 것으로 알려졌습니다. 이는 중동 정세에 새로운 긴장을 불러올 수 있습니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">트럼프 전 미국 대통령이 과거에 맺으려던 종전 관련 합의를 승인하지 않고, 이란에 더 강력한 조건을 담은 새로운 제안을 보냈다는 소식입니다. 이는 미국과 이란 사이의 관계에 다시 긴장감을 높일 수 있는 중요한 외교적 움직임입니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">2</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/005/0001852204" target="_blank" rel="noopener">
+                  [속보] 이란 반정부 매체 “페제시키안 대통령, 사임서 제출”
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">이란의 반정부 매체가 페제시키안 대통령이 사임서를 제출했다고 속보로 보도했습니다. 이는 이란 내부 정치 상황에 큰 변화를 예고하는 소식입니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">이란의 한 언론에서 페제시키안 대통령이 대통령 자리에서 물러나겠다는 서류를 냈다고 긴급 뉴스로 전했습니다. 만약 사실이라면 이란의 정치 상황에 큰 변화가 생길 수 있는 매우 중요한 소식입니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">3</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/052/0002360405" target="_blank" rel="noopener">
+                  美 공습 전략 한계?...재개방된 이란 미사일 기지 입구[자막뉴스]
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">미국의 공습에도 불구하고 이란의 미사일 기지 입구가 재개방된 모습이 포착되어, 미국의 공습 전략의 한계에 대한 의문이 제기되고 있습니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">미국이 공습을 했음에도 불구하고 이란의 미사일 기지 입구가 다시 열린 모습이 보도되었습니다. 이는 미국의 공격이 이란의 군사력을 완전히 막기에는 한계가 있는 것이 아니냐는 의문을 제기하고 있습니다. 중동 지역의 긴장 상황을 보여주는 단면입니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            </div>
+          
+        </div>
+      </div>
+    </div>
+    
+    <div class="cat-card" id="cat-105">
+
+      <!-- 클릭 가능한 헤더 -->
+      <div class="cat-header" onclick="toggleCat(this)">
+        <span class="cat-emoji">🔬</span>
+        <span class="cat-name">IT/과학</span>
+        <span class="cat-count">3건</span>
+        <span class="cat-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </span>
+      </div>
+
+      <!-- 접히는 바디 -->
+      <div class="cat-body">
+        <div class="cat-body-inner">
+          
+            <div class="article-row">
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">1</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/055/0001360648" target="_blank" rel="noopener">
+                  카카오 노조, 오는 10일 부분 파업 예고…"교섭 상황 따라 수위 강화"
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">카카오 노조가 오는 10일 부분 파업을 예고하며, 사측과의 교섭 상황에 따라 파업 수위를 강화할 수 있다고 밝혔습니다. 이는 노사 갈등이 심화되고 있음을 보여줍니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">카카오 회사 직원들이 모인 노동조합이 오는 10일에 일부분 일을 멈추는 파업을 하겠다고 예고했습니다. 회사와 대화가 잘 풀리지 않으면 파업의 강도를 더 높일 수도 있다고 합니다. 이는 회사와 직원들 사이에 해결해야 할 문제가 있다는 것을 보여줍니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">2</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/018/0006294892" target="_blank" rel="noopener">
+                  아이폰 다음은 안경?…애플, AR 없이 내년 말 출시설[모닝폰]
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">애플이 아이폰 다음으로 안경 형태의 기기를 내년 말 출시할 것이라는 설이 제기되었으며, 초기 모델에는 증강현실(AR) 기능이 포함되지 않을 것으로 예상됩니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">아이폰을 만든 애플이 다음에는 안경처럼 쓰는 새로운 기기를 내년 말쯤 내놓을 것이라는 소문이 돌고 있습니다. 처음에는 가상현실(AR) 기능은 없을 것으로 보이지만, 애플이 스마트폰 이후 어떤 혁신을 보여줄지 많은 사람들이 기대하고 있습니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            
+            <div class="article-item">
+              <div class="article-title-row">
+                <span class="art-num">3</span>
+                <a class="art-title" href="https://n.news.naver.com/mnews/article/011/0004626474" target="_blank" rel="noopener">
+                  서울반도체 고전압 광반도체, 글로벌 완성차 4개社 공급
+                </a>
+              </div>
+              <div class="art-blocks">
+                
+                <div class="art-block art-block-summary">
+                  <div class="art-label label-summary">📋 기사 요약</div>
+                  <p class="art-text">서울반도체가 개발한 고전압 광반도체가 글로벌 완성차 업체 4곳에 공급될 예정입니다. 이는 서울반도체의 기술력이 세계 시장에서 인정받고 있음을 의미합니다.</p>
+                </div>
+                
+                
+                <div class="art-block art-block-explain">
+                  <div class="art-label label-explain">📖 기사 설명</div>
+                  <p class="art-text">한국의 서울반도체라는 회사가 만든 특별한 반도체 부품이 전 세계 유명 자동차 회사 4곳에 공급될 예정이라는 소식입니다. 이는 서울반도체의 기술력이 매우 뛰어나다는 것을 보여주며, 한국의 기술이 세계 시장에서 중요한 역할을 하고 있음을 의미합니다.</p>
+                </div>
+                
+              </div>
+            </div>
+            
+            </div>
+          
+        </div>
+      </div>
+    </div>
+    
+  </div>
+
+</main>
+
+<footer class="site-footer">
+  <strong>Today's Main News</strong> &nbsp;·&nbsp; Powered by Claude AI &nbsp;·&nbsp; 2026년 06월 01일 기준
+  &nbsp;·&nbsp; <a href="/" style="color:var(--accent);text-decoration:none;">📅 다른 날짜 보기</a>
+</footer>
+
+<script>
+  /* ── 아코디언 토글 ── */
+  function toggleCat(header) {
+    const card = header.closest('.cat-card');
+    card.classList.toggle('open');
+  }
+
+  /* ── 마크다운 → HTML ── */
+  function renderMarkdown(raw) {
+    let text = raw;
+
+    // 헤딩 (테이블보다 먼저)
+    text = text.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    text = text.replace(/^## (.+)$/gm,  '<h2>$1</h2>');
+    text = text.replace(/^# (.+)$/gm,   '<h1>$1</h1>');
+
+    // 인라인 코드 → 키워드 뱃지 (backtick) — 테이블 파싱 전에 처리
+    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    // 테이블 파싱 — 줄 단위로 안전하게 처리
+    text = (function parseTable(src) {
+      const lines = src.split('\n');
+      const out = [];
+      let tableLines = [];
+
+      const isPipe = l => { const t = l.trim(); return t.startsWith('|') && t.endsWith('|'); };
+      const isSep  = l => /^\|[-:\s|]+\|$/.test(l.trim());
+
+      const renderTable = (rows) => {
+        const sepIdx = rows.findIndex(r => isSep(r));
+        let html = '<table>';
+        rows.forEach((row, i) => {
+          if (isSep(row)) return;
+          const cells = row.trim().split('|').map(c => c.trim()).filter(c => c !== '');
+          if (!cells.length) return;
+          const isHdr = sepIdx > 0 && i < sepIdx;
+          const tag = isHdr ? 'th' : 'td';
+          html += `<tr>${cells.map(c => `<${tag}>${c}</${tag}>`).join('')}</tr>`;
+        });
+        return html + '</table>';
+      };
+
+      for (const line of lines) {
+        if (isPipe(line)) {
+          tableLines.push(line);
+        } else {
+          if (tableLines.length >= 1) { out.push(renderTable(tableLines)); tableLines = []; }
+          out.push(line);
+        }
+      }
+      if (tableLines.length >= 1) out.push(renderTable(tableLines));
+      return out.join('\n');
+    })(text);
+
+    // 볼드 / 이탤릭
+    text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/\*(.+?)\*/g,     '<em>$1</em>');
+
+    // 구분선
+    text = text.replace(/^---$/gm, '<hr>');
+
+    // 리스트
+    text = text.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
+    text = text.replace(/(<li>[\s\S]*?<\/li>\n?)+/g, m => `<ul>${m}</ul>`);
+
+    // 단락
+    text = text.replace(/^(?!<[hut]|<hr|<li|<ul|<\/ul)(.+)$/gm, '<p>$1</p>');
+    text = text.replace(/<p><\/p>/g, '');
+
+    return text;
+  }
+
+  const tc = document.getElementById('trend-content');
+  if (tc) tc.innerHTML = renderMarkdown(tc.textContent);
+
+  /* ── 푸시 알림 ── */
+  const notifBtn = document.getElementById('notifBtn');
+  let _sub = null;
+
+  async function initNotif() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      if (notifBtn) notifBtn.style.display = 'none'; return;
+    }
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      _sub = await reg.pushManager.getSubscription();
+      updateNotifBtn();
+
+      // 이미 구독 중이면 서버에 자동 재등록 (서버 재시작 대응)
+      if (_sub) {
+        const keyRes = await fetch('/vapid-public-key');
+        const { key } = await keyRes.json();
+        if (key) {
+          fetch('/subscribe', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(_sub)
+          });
+        }
+      }
+    } catch(e) {}
+  }
+
+  function updateNotifBtn() {
+    if (!notifBtn) return;
+    if (_sub) {
+      notifBtn.textContent = '🔕 알림 해제';
+      notifBtn.classList.add('subscribed');
+    } else {
+      notifBtn.textContent = '🔔 알림';
+      notifBtn.classList.remove('subscribed');
+    }
+  }
+
+  async function toggleNotif() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      alert('이 브라우저는 푸시 알림을 지원하지 않습니다.\n(Chrome 브라우저를 사용해주세요)');
+      return;
+    }
+
+    // 알림 해제
+    if (_sub) {
+      try {
+        await _sub.unsubscribe();
+        await fetch('/unsubscribe', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({endpoint: _sub.endpoint})
+        });
+        _sub = null;
+        updateNotifBtn();
+        alert('알림이 해제됐습니다.');
+      } catch(e) {
+        alert('알림 해제 중 오류가 발생했습니다: ' + e.message);
+      }
+      return;
+    }
+
+    // 알림 등록
+    const perm = await Notification.requestPermission();
+    if (perm === 'denied') {
+      alert('알림이 차단됐습니다.\n브라우저 설정에서 이 사이트의 알림을 허용해주세요.');
+      return;
+    }
+    if (perm !== 'granted') {
+      alert('알림 권한을 허용해야 합니다.');
+      return;
+    }
+
+    try {
+      const keyRes = await fetch('/vapid-public-key');
+      const { key } = await keyRes.json();
+      if (!key) {
+        alert('서버 설정이 완료되지 않았습니다.\nRender 환경변수에 VAPID_PUBLIC_KEY를 추가해주세요.');
+        return;
+      }
+
+      const reg = await navigator.serviceWorker.ready;
+      _sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: key
+      });
+
+      const res = await fetch('/subscribe', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(_sub)
+      });
+
+      if ((await res.json()).ok) {
+        updateNotifBtn();
+        alert('✅ 알림 설정 완료!\n매일 오전 10시, 오후 6시에 뉴스 리포트 알림이 옵니다.');
+      }
+    } catch(e) {
+      alert('알림 설정 중 오류가 발생했습니다:\n' + e.message);
+    }
+  }
+
+  initNotif();
+
+  /* ── 탭 활성화 (스크롤 위치 기반) ── */
+  const tabs = document.querySelectorAll('.tab-item');
+  const ioOpts = { threshold: 0.2, rootMargin: '-60px 0px 0px 0px' };
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const id = entry.target.id;
+        tabs.forEach(t => t.classList.remove('active'));
+        const active = document.querySelector(`.tab-item[href="#${id}"]`);
+        if (active) {
+          active.classList.add('active');
+          active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+      }
+    });
+  }, ioOpts);
+
+  document.querySelectorAll('[id]').forEach(el => {
+    if (el.id === 'trend' || el.id.startsWith('cat-')) io.observe(el);
+  });
+</script>
+</body>
+</html>
