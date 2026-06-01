@@ -540,6 +540,17 @@ def vapid_public_key():
     return jsonify({"key": os.environ.get("VAPID_PUBLIC_KEY", "")})
 
 
+@app.route("/sw.js")
+def service_worker():
+    response = send_file(
+        Path(__file__).resolve().parent / "static" / "sw.js",
+        mimetype="application/javascript; charset=utf-8",
+    )
+    response.headers["Service-Worker-Allowed"] = "/"
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.route("/subscribe", methods=["POST"])
 def subscribe():
     sub = request.get_json()

@@ -1,4 +1,4 @@
-const CACHE = 'tmn-v4';
+const CACHE = 'tmn-v5';
 
 self.addEventListener('install', event => {
   self.skipWaiting();
@@ -23,7 +23,8 @@ self.addEventListener('fetch', event => {
       url.pathname.startsWith('/analyze') ||
       url.pathname.startsWith('/subscribe') ||
       url.pathname.startsWith('/unsubscribe') ||
-      url.pathname.startsWith('/vapid-public-key')) {
+      url.pathname.startsWith('/vapid-public-key') ||
+      url.pathname.startsWith('/sw.js')) {
     return;
   }
 

@@ -71,8 +71,14 @@
 
   async function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return null;
+
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations
+      .filter((registration) => registration.scope.includes('/static/'))
+      .map((registration) => registration.unregister()));
+
     const registration = await withTimeout(
-      navigator.serviceWorker.register('/static/sw.js', { updateViaCache: 'none' }),
+      navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }),
       10000,
       '서비스워커 등록 시간이 초과되었습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.',
     );
