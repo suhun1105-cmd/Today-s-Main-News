@@ -56,10 +56,14 @@
   function updateButtons() {
     buttons().forEach((button) => {
       if (currentSubscription) {
-        button.textContent = '알림 해제';
+        if (!button.dataset.iconOnly) button.textContent = '알림 해제';
+        button.setAttribute('aria-label', '알림 해제');
+        button.setAttribute('title', '알림 해제');
         button.classList.add('subscribed');
       } else {
-        button.textContent = button.dataset.defaultText || '알림 받기';
+        if (!button.dataset.iconOnly) button.textContent = button.dataset.defaultText || '알림 받기';
+        button.setAttribute('aria-label', '알림 받기');
+        button.setAttribute('title', '알림 받기');
         button.classList.remove('subscribed');
       }
     });
@@ -196,7 +200,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     buttons().forEach((button) => {
       button.type = 'button';
-      button.dataset.defaultText = button.textContent.trim() || '알림 받기';
+      button.dataset.defaultText = button.dataset.iconOnly ? '' : (button.textContent.trim() || '알림 받기');
       button.addEventListener('click', window.toggleNotif);
     });
     syncExistingSubscription();

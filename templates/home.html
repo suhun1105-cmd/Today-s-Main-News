@@ -254,17 +254,50 @@
     .btn.secondary:hover { background: #1e293b; }
     .btn.is-busy { opacity: .72; cursor: wait; }
 
-    .notification-actions {
-      display: flex;
-      gap: 9px;
+    .notification-fab {
+      position: fixed;
+      right: max(18px, env(safe-area-inset-right));
+      bottom: max(18px, env(safe-area-inset-bottom));
+      z-index: 20;
+      width: 56px;
+      height: 56px;
+      border: none;
+      border-radius: 50%;
+      background: #0f172a;
+      color: #fff;
+      display: inline-flex;
       align-items: center;
+      justify-content: center;
+      box-shadow: 0 16px 34px rgba(15,23,42,.28);
+      cursor: pointer;
+      transition: transform .16s ease, background .16s ease, box-shadow .16s ease;
+    }
+    .notification-fab:hover {
+      background: #1e293b;
+      transform: translateY(-1px);
+      box-shadow: 0 18px 38px rgba(15,23,42,.32);
+    }
+    .notification-fab.subscribed { background: var(--accent); }
+    .notification-fab.is-busy { opacity: .74; cursor: wait; }
+    .notification-fab svg {
+      width: 24px;
+      height: 24px;
+      stroke: currentColor;
     }
 
     .notification-status {
-      margin-top: 10px;
-      color: var(--muted);
-      font-size: .8rem;
+      position: fixed;
+      right: max(18px, env(safe-area-inset-right));
+      bottom: calc(max(18px, env(safe-area-inset-bottom)) + 68px);
+      z-index: 20;
+      max-width: min(300px, calc(100vw - 36px));
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(15,23,42,.94);
+      color: #fff;
+      font-size: .78rem;
       line-height: 1.55;
+      box-shadow: 0 12px 28px rgba(15,23,42,.22);
     }
 
     .empty {
@@ -339,19 +372,19 @@
           {% endif %}
         </section>
 
-        <section class="panel">
-          <div class="panel-title">알림 설정</div>
-          <div class="notification-actions">
-            <button class="btn secondary" data-notification-button type="button">알림 받기</button>
-          </div>
-          <div class="notification-status" data-notification-status hidden></div>
-        </section>
-
       </main>
     </div>
 
     <p class="footer">Today's Main News · AI News Digest</p>
   </div>
+
+  <button class="notification-fab" data-notification-button data-icon-only="true" type="button" aria-label="알림 받기" title="알림 받기">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  </button>
+  <div class="notification-status" data-notification-status hidden></div>
 
   <script>
     function openSelectedReport() {
@@ -360,6 +393,6 @@
       window.location.href = '/report?date=' + encodeURIComponent(select.value);
     }
   </script>
-  <script src="/static/notifications.js?v=20260601-3"></script>
+  <script src="/static/notifications.js?v=20260601-4"></script>
 </body>
 </html>
