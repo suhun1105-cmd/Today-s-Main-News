@@ -339,13 +339,23 @@ def unsubscribe():
 
 @app.route("/trigger")
 def trigger():
+    # UptimeRobot keep-alive endpoint.
+    # Without force=1 it must not create a report, otherwise it can run before
+    # the 9 AM scheduled job and make the real schedule skip.
+    force = request.args.get("force")
+    if not force:
+        return jsonify({
+            "ok": True,
+            "msg": "awake",
+            "now_kst": datetime.now(tz=KST).isoformat(),
+        })
+
     with _lock:
         if _state["running"]:
             return jsonify({"ok": False, "msg": "already running"})
 
-    force = request.args.get("force")
     path = _latest_report_path()
-    if path and _has_today_report(path) and not force:
+    if path and _has_today_report(path):
         return jsonify({"ok": False, "msg": "today report already exists"})
 
     threading.Thread(target=_run_pipeline, daemon=True).start()
