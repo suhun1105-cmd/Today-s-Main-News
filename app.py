@@ -29,6 +29,11 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "suhun1105-cmd/Today-s-Main-News")
 GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
 REPORT_RETENTION_DAYS = 7
+TREND_COLOR_STYLE = """
+<style id="trend-color-style">
+.trend-content tbody tr:nth-child(1) td{background:#eff6ff!important;border-color:#bfdbfe!important}.trend-content tbody tr:nth-child(2) td{background:#f0fdf4!important;border-color:#bbf7d0!important}.trend-content tbody tr:nth-child(3) td{background:#fff7ed!important;border-color:#fed7aa!important}.trend-content tbody tr:nth-child(4) td{background:#fdf2f8!important;border-color:#fbcfe8!important}.trend-content tbody tr:nth-child(5) td{background:#f5f3ff!important;border-color:#ddd6fe!important}.trend-content tbody tr:nth-child(6) td{background:#ecfeff!important;border-color:#a5f3fc!important}.trend-content tbody tr:nth-child(1) td:first-child,.trend-content tbody tr:nth-child(1) code{color:#1d4ed8!important}.trend-content tbody tr:nth-child(2) td:first-child,.trend-content tbody tr:nth-child(2) code{color:#15803d!important}.trend-content tbody tr:nth-child(3) td:first-child,.trend-content tbody tr:nth-child(3) code{color:#c2410c!important}.trend-content tbody tr:nth-child(4) td:first-child,.trend-content tbody tr:nth-child(4) code{color:#be185d!important}.trend-content tbody tr:nth-child(5) td:first-child,.trend-content tbody tr:nth-child(5) code{color:#6d28d9!important}.trend-content tbody tr:nth-child(6) td:first-child,.trend-content tbody tr:nth-child(6) code{color:#0e7490!important}.trend-content code{background:rgba(255,255,255,.72)!important;border:1px solid rgba(148,163,184,.3)!important}@media(max-width:768px){.trend-content tbody tr:nth-child(1) td:first-child{background:#dbeafe!important}.trend-content tbody tr:nth-child(2) td:first-child{background:#dcfce7!important}.trend-content tbody tr:nth-child(3) td:first-child{background:#ffedd5!important}.trend-content tbody tr:nth-child(4) td:first-child{background:#fce7f3!important}.trend-content tbody tr:nth-child(5) td:first-child{background:#ede9fe!important}.trend-content tbody tr:nth-child(6) td:first-child{background:#cffafe!important}}
+</style>
+"""
 
 app = Flask(__name__, template_folder="templates")
 
@@ -270,6 +275,8 @@ def _prepare_report_html(html: str) -> str:
         html,
     )
     html = re.sub(r"##\s*2\.\s*카테고리별 핵심 키워드", "## 카테고리별 핵심 키워드", html)
+    if "trend-color-style" not in html and "</head>" in html:
+        html = html.replace("</head>", f"{TREND_COLOR_STYLE}\n</head>", 1)
 
     return html
 

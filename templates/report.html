@@ -184,14 +184,25 @@
       vertical-align: middle;
       line-height: 1.6;
     }
-    .trend-content tr:nth-child(even) td { background: var(--surface2); }
+    .trend-content tbody tr:nth-child(1) td { background: #eff6ff; border-color: #bfdbfe; }
+    .trend-content tbody tr:nth-child(2) td { background: #f0fdf4; border-color: #bbf7d0; }
+    .trend-content tbody tr:nth-child(3) td { background: #fff7ed; border-color: #fed7aa; }
+    .trend-content tbody tr:nth-child(4) td { background: #fdf2f8; border-color: #fbcfe8; }
+    .trend-content tbody tr:nth-child(5) td { background: #f5f3ff; border-color: #ddd6fe; }
+    .trend-content tbody tr:nth-child(6) td { background: #ecfeff; border-color: #a5f3fc; }
+    .trend-content tbody tr:nth-child(1) td:first-child { color: #1d4ed8; }
+    .trend-content tbody tr:nth-child(2) td:first-child { color: #15803d; }
+    .trend-content tbody tr:nth-child(3) td:first-child { color: #c2410c; }
+    .trend-content tbody tr:nth-child(4) td:first-child { color: #be185d; }
+    .trend-content tbody tr:nth-child(5) td:first-child { color: #6d28d9; }
+    .trend-content tbody tr:nth-child(6) td:first-child { color: #0e7490; }
 
     /* 인라인 코드 → 키워드 뱃지 */
     .trend-content code {
       display: inline-block;
-      background: var(--accent-light);
-      color: var(--accent-dark);
-      border: 1px solid var(--accent-border);
+      background: rgba(255,255,255,.72);
+      color: #334155;
+      border: 1px solid rgba(148,163,184,.3);
       border-radius: 999px;
       padding: 2px 10px;
       font-size: 0.78rem; font-weight: 600;
@@ -200,6 +211,12 @@
       white-space: nowrap;
       vertical-align: middle;
     }
+    .trend-content tbody tr:nth-child(1) code { color: #1d4ed8; border-color: #93c5fd; }
+    .trend-content tbody tr:nth-child(2) code { color: #15803d; border-color: #86efac; }
+    .trend-content tbody tr:nth-child(3) code { color: #c2410c; border-color: #fdba74; }
+    .trend-content tbody tr:nth-child(4) code { color: #be185d; border-color: #f9a8d4; }
+    .trend-content tbody tr:nth-child(5) code { color: #6d28d9; border-color: #c4b5fd; }
+    .trend-content tbody tr:nth-child(6) code { color: #0e7490; border-color: #67e8f9; }
 
     /* 트렌드 테이블 첫 열(카테고리) 고정 너비 */
     .trend-content td:first-child,
@@ -242,8 +259,12 @@
         padding: 8px 12px;
         line-height: 2;
       }
-      .trend-content tr:nth-child(even) td { background: inherit; }
-      .trend-content tr:nth-child(even) td:first-child { background: var(--accent-light); }
+      .trend-content tbody tr:nth-child(1) td:first-child { background: #dbeafe; border-bottom-color: #bfdbfe; }
+      .trend-content tbody tr:nth-child(2) td:first-child { background: #dcfce7; border-bottom-color: #bbf7d0; }
+      .trend-content tbody tr:nth-child(3) td:first-child { background: #ffedd5; border-bottom-color: #fed7aa; }
+      .trend-content tbody tr:nth-child(4) td:first-child { background: #fce7f3; border-bottom-color: #fbcfe8; }
+      .trend-content tbody tr:nth-child(5) td:first-child { background: #ede9fe; border-bottom-color: #ddd6fe; }
+      .trend-content tbody tr:nth-child(6) td:first-child { background: #cffafe; border-bottom-color: #a5f3fc; }
     }
 
     /* ── CATEGORY SECTION LABEL ─────────────── */
