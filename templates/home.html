@@ -298,6 +298,13 @@
       font-size: .78rem;
       line-height: 1.55;
       box-shadow: 0 12px 28px rgba(15,23,42,.22);
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity .25s ease, transform .25s ease;
+    }
+    .notification-status.is-hiding {
+      opacity: 0;
+      transform: translateY(8px);
     }
 
     .empty {
@@ -393,6 +400,6 @@
       window.location.href = '/report?date=' + encodeURIComponent(select.value);
     }
   </script>
-  <script src="/static/notifications.js?v=20260601-5"></script>
+  <script src="/static/notifications.js?v=20260601-6"></script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 (function () {
   const unsupportedMessage = '이 브라우저는 푸시 알림을 지원하지 않습니다.\nChrome 브라우저로 접속해주세요.';
   let currentSubscription = null;
+  let statusTimer = null;
 
   function urlBase64ToUint8Array(base64String) {
     const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -39,11 +40,26 @@
     return result;
   }
 
-  function setStatus(message) {
+  function setStatus(message, autoHide = false) {
+    window.clearTimeout(statusTimer);
     document.querySelectorAll('[data-notification-status]').forEach((el) => {
+      el.classList.remove('is-hiding');
       el.textContent = message || '';
       el.hidden = !message;
     });
+
+    if (message && autoHide) {
+      statusTimer = window.setTimeout(() => {
+        document.querySelectorAll('[data-notification-status]').forEach((el) => {
+          el.classList.add('is-hiding');
+          window.setTimeout(() => {
+            el.hidden = true;
+            el.textContent = '';
+            el.classList.remove('is-hiding');
+          }, 260);
+        });
+      }, 3000);
+    }
   }
 
   function setBusy(isBusy) {
@@ -113,23 +129,22 @@
 
   async function subscribe() {
     if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-      alert(unsupportedMessage);
+      setStatus(unsupportedMessage, true);
       return;
     }
 
-    alert('알림 설정을 시작합니다.\n권한 요청이 나오면 허용을 눌러주세요.');
+    setStatus('알림 설정을 시작합니다. 권한 요청이 나오면 허용을 눌러주세요.', true);
     setBusy(true);
     setStatus('알림 권한을 확인하는 중입니다...');
 
     try {
       const permission = await Notification.requestPermission();
       if (permission === 'denied') {
-        setStatus('알림이 차단되어 있습니다. 브라우저 사이트 설정에서 알림을 허용해주세요.');
-        alert('알림이 차단되어 있습니다.\n브라우저 사이트 설정에서 이 사이트의 알림을 허용해주세요.');
+        setStatus('알림이 차단되어 있습니다. 브라우저 사이트 설정에서 알림을 허용해주세요.', true);
         return;
       }
       if (permission !== 'granted') {
-        setStatus('알림 권한이 허용되지 않았습니다.');
+        setStatus('알림 권한이 허용되지 않았습니다.', true);
         return;
       }
 
@@ -158,11 +173,9 @@
       await postSubscription('/subscribe?test=1', currentSubscription);
 
       updateButtons();
-      setStatus('알림 설정 완료. 테스트 알림을 보내는 중입니다.');
-      alert('알림 설정이 완료되었습니다.\n매일 오전 9시 리포트가 생성되면 핸드폰으로 알림이 옵니다.');
+      setStatus('알림 설정이 완료되었습니다. 매일 오전 9시 리포트가 생성되면 핸드폰으로 알림이 옵니다.', true);
     } catch (error) {
-      setStatus('알림 등록 실패: ' + error.message);
-      alert('알림 등록 실패:\n' + error.message);
+      setStatus('알림 등록 실패: ' + error.message, true);
     } finally {
       setBusy(false);
     }
@@ -185,11 +198,9 @@
 
       currentSubscription = null;
       updateButtons();
-      setStatus('알림이 해제되었습니다.');
-      alert('알림이 해제되었습니다.');
+      setStatus('알림이 해제되었습니다.', true);
     } catch (error) {
-      setStatus('알림 해제 실패: ' + error.message);
-      alert('알림 해제 실패:\n' + error.message);
+      setStatus('알림 해제 실패: ' + error.message, true);
     } finally {
       setBusy(false);
     }
