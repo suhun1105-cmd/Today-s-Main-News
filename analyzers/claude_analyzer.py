@@ -16,6 +16,7 @@ _json_model = genai.GenerativeModel(
     system_instruction=(
         "당신은 뉴스 해설 전문가입니다. "
         "기사 제목을 바탕으로 핵심 요약과 쉬운 기사 설명을 한국어로 작성합니다. "
+        "제목에 없는 사실을 지어내지 말고, 제목에서 확인되는 내용과 일반적인 배경 설명을 구분하세요. "
         "응답은 반드시 순수 JSON 객체만 출력하세요. "
         "마크다운 코드블록이나 JSON 밖의 문장은 절대 포함하지 마세요."
     ),
@@ -66,9 +67,13 @@ def analyze_article(cat_name: str, article: dict) -> dict:
     prompt = (
         f"카테고리: {cat_name}\n"
         f"기사 제목: {title}\n\n"
+        "기사 본문이 아니라 제목만 제공됩니다. 제목에 없는 구체적인 수치, 발언, 원인, 결과는 지어내지 마세요.\n"
+        "다만 독자가 이해하기 쉽도록 제목에서 확인되는 내용, 배경, 왜 중요한지를 충분히 풀어 쓰세요.\n\n"
         "아래 두 필드만 가진 JSON으로 응답하세요.\n"
-        '{"summary": "기사 핵심을 2~3문장으로 요약", '
-        '"explanation": "기사 내용을 초등학생도 이해할 수 있게 3~4문장으로 설명"}'
+        "{\n"
+        '  "summary": "기사 핵심을 3~4문장으로 요약. 누가/무엇을/왜 중요한지를 포함하되 추측은 피함.",\n'
+        '  "explanation": "초등학생도 이해할 수 있게 4~5문장으로 설명. 어려운 단어를 쉽게 풀고, 이 일이 사람들에게 어떤 의미인지 설명."\n'
+        "}"
     )
 
     response = _json_model.generate_content(
@@ -76,7 +81,7 @@ def analyze_article(cat_name: str, article: dict) -> dict:
         generation_config=GenerationConfig(
             response_mime_type="application/json",
             temperature=0.3,
-            max_output_tokens=600,
+            max_output_tokens=1000,
         ),
         request_options={"timeout": 60},
     )
@@ -119,7 +124,7 @@ def analyze_report(category_data: list[dict]) -> dict:
         "{\n"
         '  "categories": [\n'
         '    {"id": 100, "articles": [\n'
-        '      {"index": 0, "summary": "기사 핵심 2~3문장", "explanation": "기사 설명 3~4문장"},\n'
+        '      {"index": 0, "summary": "기사 핵심 3~4문장", "explanation": "기사 설명 4~5문장"},\n'
         '      {"index": 1, "summary": "...", "explanation": "..."},\n'
         '      {"index": 2, "summary": "...", "explanation": "..."}\n'
         "    ]}\n"
@@ -130,7 +135,14 @@ def analyze_report(category_data: list[dict]) -> dict:
         "## 카테고리별 핵심 키워드\n"
         "헤더와 구분선 없이 데이터 행만 있는 마크다운 표로 작성하세요.\n"
         "형식: | 카테고리명 | `키워드1` `키워드2` `키워드3` |\n\n"
-        "모든 카테고리와 모든 기사 index를 빠짐없이 포함하세요."
+        "각 기사 분석 작성 규칙:\n"
+        "- summary는 3~4문장으로 작성하세요.\n"
+        "- summary에는 제목에서 확인되는 핵심 사건, 관련 주체, 독자가 알아야 할 맥락을 포함하세요.\n"
+        "- explanation은 4~5문장으로 작성하세요.\n"
+        "- explanation은 초등학생도 이해할 수 있게 어려운 단어를 풀어 설명하고, 왜 중요한 뉴스인지 알려주세요.\n"
+        "- 제목에 없는 세부 사실, 수치, 원인, 결과는 절대 만들어내지 마세요.\n"
+        "- 정보가 부족하면 '제목만 보면' 또는 '제목상으로는'처럼 한계를 드러내세요.\n"
+        "- 모든 카테고리와 모든 기사 index를 빠짐없이 포함하세요."
     )
 
     response = _json_model.generate_content(
@@ -138,7 +150,7 @@ def analyze_report(category_data: list[dict]) -> dict:
         generation_config=GenerationConfig(
             response_mime_type="application/json",
             temperature=0.3,
-            max_output_tokens=8192,
+            max_output_tokens=12000,
         ),
         request_options={"timeout": 120},
     )
