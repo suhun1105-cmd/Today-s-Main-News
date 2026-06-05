@@ -76,19 +76,6 @@
       font-weight: 700; letter-spacing: -.03em;
       line-height: 1.15; color: #fff;
     }
-    .header-sub {
-      font-size: 0.88rem; color: #94a3b8;
-      margin-top: 6px; font-weight: 400;
-    }
-    .header-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
-    .pill {
-      display: inline-flex; align-items: center; gap: 5px;
-      background: rgba(255,255,255,.08);
-      border: 1px solid rgba(255,255,255,.15);
-      border-radius: 999px; padding: 5px 13px;
-      font-size: 0.75rem; font-weight: 500; color: #cbd5e1;
-    }
-
     /* ── STICKY TAB BAR ─────────────────────── */
     .tab-bar {
       position: sticky; top: 0; z-index: 100;
@@ -437,12 +424,6 @@
       <span class="eyebrow-dot"></span> Live · AI News Digest
     </div>
     <h1>Today's Main News</h1>
-    <p class="header-sub">AI-Powered Daily News Analysis &nbsp;—&nbsp; {{ generated_at }}</p>
-    <div class="header-pills">
-      <span class="pill">📂 {{ categories|length }} Categories</span>
-      <span class="pill">📰 {{ categories|length * 3 }} Articles Analyzed</span>
-      <span class="pill">🤖 Powered by Claude AI</span>
-    </div>
   </div>
 </header>
 
@@ -531,8 +512,7 @@
 </main>
 
 <footer class="site-footer">
-  <strong>Today's Main News</strong> &nbsp;·&nbsp; Powered by Claude AI &nbsp;·&nbsp; {{ generated_at }} 기준
-  &nbsp;·&nbsp; <a href="/" style="color:var(--accent);text-decoration:none;">📅 다른 날짜 보기</a>
+  <strong>Today's Main News</strong> &nbsp;·&nbsp; <a href="/" style="color:var(--accent);text-decoration:none;">📅 다른 날짜 보기</a>
 </footer>
 
 <script>

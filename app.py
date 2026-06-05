@@ -117,6 +117,44 @@ def _is_broken_html(content: str) -> bool:
     return any(marker in content for marker in broken_markers)
 
 
+def _fallback_article_analysis(cat_name: str, title: str) -> dict:
+    return {
+        "title": title,
+        "summary": (
+            f"{cat_name} 분야의 주요 기사입니다. 제목상으로는 '{title}'와 관련된 사안이 "
+            "오늘 주요 뉴스로 다뤄지고 있습니다. 구체적인 세부 내용은 원문 확인이 필요하지만, "
+            "해당 분야에서 관심 있게 볼 만한 변화나 논의가 생긴 것으로 볼 수 있습니다."
+        ),
+        "explanation": (
+            "쉽게 말해, 이 기사는 제목에 나온 사건이나 변화가 왜 뉴스가 되는지를 살펴보는 내용입니다. "
+            "현재 앱은 기사 본문 전체가 아니라 제목을 바탕으로 설명을 만들기 때문에, 세부 사실은 원문 기사에서 확인하는 것이 좋습니다. "
+            f"이 뉴스가 중요한 이유는 {cat_name} 분야의 흐름을 이해하는 데 도움이 되기 때문입니다. "
+            "어떤 사람이나 기관이 관련되어 있고, 그 일이 앞으로 어떤 영향을 줄 수 있는지 생각해보면 뉴스를 더 쉽게 이해할 수 있습니다. "
+            "정확한 판단을 위해서는 기사 제목을 누른 뒤 원문을 함께 확인하는 것이 좋습니다."
+        ),
+    }
+
+
+def _fallback_trends(category_data: list[dict]) -> str:
+    lines = ["## 카테고리별 핵심 키워드"]
+    for cat in category_data:
+        titles = [article.get("title", "") for article in cat["articles"] if article.get("title")]
+        words = []
+        for title in titles:
+            for token in re.findall(r"[가-힣A-Za-z0-9/]{2,}", title):
+                if token not in words:
+                    words.append(token)
+                if len(words) >= 3:
+                    break
+            if len(words) >= 3:
+                break
+        while len(words) < 3:
+            words.append(cat["name"])
+        keyword_text = " ".join(f"`{word}`" for word in words[:3])
+        lines.append(f"| {cat['name']} | {keyword_text} |")
+    return "\n".join(lines)
+
+
 def _load_subs() -> None:
     global _subscriptions
     if not SUBS_FILE.exists():
@@ -289,6 +327,19 @@ def _github_report_html(date_key: str) -> str | None:
 def _prepare_report_html(html: str) -> str:
     html = html.replace(' onclick="toggleNotif()"', "")
     html = html.replace(" onclick='toggleNotif()'", "")
+    html = re.sub(r'<div class=["\']header-pills["\'][\s\S]*?</div>', "", html)
+    html = re.sub(
+        r'<p class=["\']header-sub["\']>[\s\S]*?</p>',
+        "",
+        html,
+        count=1,
+    )
+    html = re.sub(
+        r'<footer class=["\']site-footer["\'][\s\S]*?</footer>',
+        '<footer class="site-footer"><strong>Today\'s Main News</strong> &nbsp;·&nbsp; <a href="/" style="color:var(--accent);text-decoration:none;">📅 다른 날짜 보기</a></footer>',
+        html,
+        count=1,
+    )
     html = re.sub(
         r'<button[^>]*(id=["\']notifBtn["\']|data-notification-button)[\s\S]*?</button>',
         "",
@@ -422,22 +473,19 @@ def _run_pipeline() -> None:
                 }
                 for i, article in enumerate(cat["articles"]):
                     item = by_index.get(i, {})
+                    fallback = _fallback_article_analysis(cat["name"], article["title"])
                     article["analysis"] = {
                         "title": article["title"],
-                        "summary": item.get("summary", ""),
-                        "explanation": item.get("explanation", ""),
+                        "summary": item.get("summary") or fallback["summary"],
+                        "explanation": item.get("explanation") or fallback["explanation"],
                     }
 
-            trends = report_analysis.get("trends", "")
+            trends = report_analysis.get("trends") or _fallback_trends(category_data)
         except Exception as exc:
-            trends = f"트렌드 분석을 불러오지 못했습니다.\n\n오류: {str(exc)[:200]}"
+            trends = _fallback_trends(category_data)
             for cat in category_data:
                 for article in cat["articles"]:
-                    article["analysis"] = {
-                        "title": article["title"],
-                        "summary": "",
-                        "explanation": f"분석 중 오류가 발생했습니다: {str(exc)[:120]}",
-                    }
+                    article["analysis"] = _fallback_article_analysis(cat["name"], article["title"])
 
         with _lock:
             _state["steps_done"] = 3
@@ -622,6 +670,15 @@ def unsubscribe():
     _subscriptions = [sub for sub in _subscriptions if sub.get("endpoint") != endpoint]
     _save_subs()
     return jsonify({"ok": True})
+
+
+@app.route("/test-push")
+def test_push():
+    _send_push(
+        "News 알림 테스트",
+        "알림 설정이 정상이라면 이 메시지가 핸드폰에 표시됩니다.",
+    )
+    return jsonify({"ok": True, "subscriptions": len(_subscriptions)})
 
 
 @app.route("/trigger")
