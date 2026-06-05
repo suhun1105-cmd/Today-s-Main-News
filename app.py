@@ -548,7 +548,8 @@ def debug():
             "github_enabled": _github_enabled(),
             "github_repo": GITHUB_REPO,
             "github_branch": GITHUB_BRANCH,
-            "has_google_api_key": bool(os.environ.get("GOOGLE_API_KEY")),
+            "has_openai_api_key": bool(os.environ.get("OPENAI_API_KEY")),
+            "openai_model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
             "has_vapid_private_key": bool(os.environ.get("VAPID_PRIVATE_KEY_B64")),
             "has_vapid_public_key": bool(os.environ.get("VAPID_PUBLIC_KEY")),
         }
@@ -557,21 +558,24 @@ def debug():
 
 @app.route("/test-api")
 def test_api():
-    if not os.environ.get("GOOGLE_API_KEY"):
-        return jsonify({"ok": False, "error": "GOOGLE_API_KEY 환경변수가 없습니다."})
+    if not os.environ.get("OPENAI_API_KEY"):
+        return jsonify({"ok": False, "error": "OPENAI_API_KEY 환경변수가 없습니다."})
 
     try:
-        import google.generativeai as genai
+        from analyzers.claude_analyzer import _extract_output_text, _openai_headers
 
-        from config import GEMINI_MODEL
-
-        genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
-        model = genai.GenerativeModel(GEMINI_MODEL)
-        response = model.generate_content(
-            "한국어로 'API 정상'이라고만 답하세요.",
-            request_options={"timeout": 30},
+        response = httpx.post(
+            "https://api.openai.com/v1/responses",
+            headers=_openai_headers(),
+            json={
+                "model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+                "input": "한국어로 'API 정상'이라고만 답하세요.",
+                "max_output_tokens": 20,
+            },
+            timeout=30,
         )
-        return jsonify({"ok": True, "response": response.text})
+        response.raise_for_status()
+        return jsonify({"ok": True, "response": _extract_output_text(response.json())})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)})
 

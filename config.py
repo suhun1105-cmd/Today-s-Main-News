@@ -8,4 +8,4 @@ NAVER_CATEGORIES = [
 ]
 
 DEFAULT_ARTICLES_PER_CATEGORY = 3
-GEMINI_MODEL = "gemini-2.5-flash"
+OPENAI_MODEL = "gpt-4o-mini"
