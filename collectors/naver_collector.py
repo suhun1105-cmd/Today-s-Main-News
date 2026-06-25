@@ -104,7 +104,7 @@ def _fetch_category(cat: dict) -> dict:
     keyword = _CATEGORY_KEYWORDS.get(cat["id"], cat["name"])
 
     try:
-        qs = urlencode({"query": keyword, "display": limit, "sort": "date"})
+        qs = urlencode({"query": keyword.encode("utf-8"), "display": limit, "sort": "date"})
         resp = httpx.get(
             f"{_API_URL}?{qs}",
             headers={
