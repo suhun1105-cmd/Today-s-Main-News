@@ -1,0 +1,15 @@
+name: Daily News Report
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 매일 00:00 UTC = 한국시간 09:00 KST
+  workflow_dispatch:       # 수동 실행도 허용
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake up server & trigger report
+        run: |
+          curl -fsS --max-time 90 \
+            "https://todays-main-news.onrender.com/trigger?force=1&skip_existing=1"

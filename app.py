@@ -504,10 +504,9 @@ def _run_pipeline() -> None:
             _state["last_report"] = str(html_path)
             _state["running"] = False
 
-        now_str = datetime.now(tz=KST).strftime("%m월 %d일 오전 9시")
         _send_push(
-            "오늘의 뉴스 리포트가 준비됐습니다",
-            f"{now_str} 기준 뉴스 리포트가 생성됐습니다. 앱에서 확인하세요.",
+            "Today's Main News",
+            "오늘의 주요 뉴스를 확인하세요!",
         )
 
     except Exception as exc:

@@ -1,4 +1,4 @@
-const CACHE = 'tmn-v5';
+const CACHE = 'tmn-v6';
 
 self.addEventListener('install', event => {
   self.skipWaiting();
@@ -35,8 +35,8 @@ self.addEventListener('fetch', event => {
 
 self.addEventListener('push', event => {
   let data = {
-    title: '오늘의 뉴스 리포트가 준비됐습니다',
-    body: '오전 9시 기준 뉴스 리포트가 생성됐습니다. 앱에서 확인하세요.',
+    title: "Today's Main News",
+    body: '오늘의 주요 뉴스를 확인하세요!',
   };
 
   try {
