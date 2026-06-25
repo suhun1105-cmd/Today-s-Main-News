@@ -148,8 +148,6 @@ def _fetch_category(cat: dict) -> dict:
             "source": "NaverAPI",
         }
     except Exception as e:
-        import traceback
-        print(f"  [DEBUG-TRACE] {cat['name']}:\n{traceback.format_exc()}", flush=True)
         return {
             "id": cat["id"],
             "name": cat["name"],
@@ -165,6 +163,9 @@ def collect_all() -> list[dict]:
         raise RuntimeError(
             "NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 환경변수가 없습니다. .env 파일을 확인하세요."
         )
+    cid_preview = (_CLIENT_ID[:4] + "***") if _CLIENT_ID else "None"
+    csec_preview = (_CLIENT_SECRET[:4] + "***") if _CLIENT_SECRET else "None"
+    print(f"  [DEBUG] CLIENT_ID 앞4자리: {cid_preview!r}, CLIENT_SECRET 앞4자리: {csec_preview!r}")
 
     results = []
     with ThreadPoolExecutor(max_workers=6) as executor:
