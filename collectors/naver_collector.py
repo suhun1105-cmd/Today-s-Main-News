@@ -148,6 +148,8 @@ def _fetch_category(cat: dict) -> dict:
             "source": "NaverAPI",
         }
     except Exception as e:
+        import traceback
+        print(f"  [DEBUG-TRACE] {cat['name']}:\n{traceback.format_exc()}", flush=True)
         return {
             "id": cat["id"],
             "name": cat["name"],
