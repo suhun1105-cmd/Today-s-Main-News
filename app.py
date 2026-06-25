@@ -578,6 +578,35 @@ def test_collect():
     })
 
 
+@app.route("/test-analyze")
+def test_analyze():
+    """수집 + AI 분석 end-to-end 테스트 (기사 1건)"""
+    from collectors.naver_collector import _fetch_category
+    from analyzers.claude_analyzer import analyze_article
+    from config import NAVER_CATEGORIES
+
+    cat = NAVER_CATEGORIES[1]
+    result = _fetch_category(cat)
+    if result.get("error") or not result["articles"]:
+        return jsonify({"ok": False, "error": result.get("error", "기사 없음")})
+
+    article = result["articles"][0]
+    try:
+        analysis = analyze_article(cat["name"], article)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)})
+
+    return jsonify({
+        "ok": True,
+        "title": article["title"],
+        "snippet": article.get("summary", ""),
+        "body_len": len(article.get("body", "")),
+        "body_preview": article.get("body", "")[:400],
+        "summary": analysis.get("summary", ""),
+        "explanation": analysis.get("explanation", ""),
+    })
+
+
 @app.route("/test-api")
 def test_api():
     if not os.environ.get("OPENAI_API_KEY"):
