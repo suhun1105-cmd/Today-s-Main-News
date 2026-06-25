@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import threading
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -16,7 +17,7 @@ from flask import Flask, Response, jsonify, redirect, render_template, request, 
 load_dotenv()
 sys.path.insert(0, str(Path(__file__).parent))
 
-from analyzers.claude_analyzer import analyze_report
+from analyzers.claude_analyzer import analyze_article, analyze_trends_only
 from collectors.naver_collector import collect_all
 from reporters import html_reporter, md_reporter
 
@@ -455,37 +456,40 @@ def _run_pipeline() -> None:
             _state["step"] = "뉴스 수집 중..."
 
         category_data = collect_all()
+
+        total = sum(len(cat["articles"]) for cat in category_data)
+        done = 0
         with _lock:
             _state["steps_done"] = 1
-            _state["step"] = "AI 분석 중... (전체 기사 1회 처리)"
+            _state["steps_total"] = total + 3
+            _state["step"] = f"AI 분석 중... (0/{total})"
 
-        try:
-            report_analysis = analyze_report(category_data)
-            analysis_by_cat = {
-                item.get("id"): item.get("articles", [])
-                for item in report_analysis.get("categories", [])
-            }
-
-            for cat in category_data:
-                by_index = {
-                    item.get("index"): item
-                    for item in analysis_by_cat.get(cat["id"], [])
-                }
-                for i, article in enumerate(cat["articles"]):
-                    item = by_index.get(i, {})
-                    fallback = _fallback_article_analysis(cat["name"], article["title"])
+        # 기사 1개씩 순차 호출 — 배치 호출 대비 토큰·레이트리밋 부담 최소화
+        for cat in category_data:
+            for article in cat["articles"]:
+                fallback = _fallback_article_analysis(cat["name"], article["title"])
+                try:
+                    result = analyze_article(cat["name"], article)
                     article["analysis"] = {
                         "title": article["title"],
-                        "summary": item.get("summary") or fallback["summary"],
-                        "explanation": item.get("explanation") or fallback["explanation"],
+                        "summary": result.get("summary") or fallback["summary"],
+                        "explanation": result.get("explanation") or fallback["explanation"],
                     }
+                except Exception:
+                    article["analysis"] = fallback
+                done += 1
+                with _lock:
+                    _state["steps_done"] = 1 + done
+                    _state["step"] = f"AI 분석 중... ({done}/{total})"
+                if done < total:
+                    time.sleep(1)
 
-            trends = report_analysis.get("trends") or _fallback_trends(category_data)
-        except Exception as exc:
+        with _lock:
+            _state["step"] = "트렌드 분석 중..."
+        try:
+            trends = analyze_trends_only(category_data) or _fallback_trends(category_data)
+        except Exception:
             trends = _fallback_trends(category_data)
-            for cat in category_data:
-                for article in cat["articles"]:
-                    article["analysis"] = _fallback_article_analysis(cat["name"], article["title"])
 
         with _lock:
             _state["steps_done"] = 3

@@ -216,3 +216,31 @@ def analyze_report(category_data: list[dict]) -> dict:
 def analyze_trends(category_data: list[dict]) -> str:
     report = analyze_report(category_data)
     return report.get("trends", "")
+
+
+_TRENDS_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["trends"],
+    "properties": {"trends": {"type": "string"}},
+}
+
+
+def analyze_trends_only(category_data: list[dict]) -> str:
+    """제목만으로 트렌드 키워드 표를 생성하는 경량 호출."""
+    payload = [
+        {
+            "name": cat["name"],
+            "titles": [a["title"] for a in cat["articles"] if a.get("title")],
+        }
+        for cat in category_data
+    ]
+    prompt = (
+        "아래 카테고리별 뉴스 제목을 바탕으로 핵심 키워드 표를 작성하세요.\n\n"
+        f"{json.dumps(payload, ensure_ascii=False)}\n\n"
+        "## 카테고리별 핵심 키워드\n"
+        "헤더와 구분선 없이 데이터 행만 있는 마크다운 표로 작성하세요.\n"
+        "형식: | 카테고리명 | `키워드1` `키워드2` `키워드3` |"
+    )
+    result = _responses_json(prompt, _TRENDS_SCHEMA, "trends_only", 600)
+    return result.get("trends", "")
