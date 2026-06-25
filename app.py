@@ -555,6 +555,29 @@ def debug():
     )
 
 
+@app.route("/test-collect")
+def test_collect():
+    from collectors.naver_collector import _fetch_category
+    from config import NAVER_CATEGORIES
+
+    cat = NAVER_CATEGORIES[1]  # 경제 카테고리로 테스트
+    result = _fetch_category(cat)
+    return jsonify({
+        "category": result["name"],
+        "error": result.get("error"),
+        "articles": [
+            {
+                "title": a["title"],
+                "snippet_len": len(a.get("summary", "")),
+                "snippet": a.get("summary", ""),
+                "body_len": len(a.get("body", "")),
+                "body_preview": a.get("body", "")[:300],
+            }
+            for a in result["articles"]
+        ],
+    })
+
+
 @app.route("/test-api")
 def test_api():
     if not os.environ.get("OPENAI_API_KEY"):
