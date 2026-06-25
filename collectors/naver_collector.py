@@ -2,6 +2,7 @@ import os
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urlencode
 
 import httpx
 
@@ -103,13 +104,13 @@ def _fetch_category(cat: dict) -> dict:
     keyword = _CATEGORY_KEYWORDS.get(cat["id"], cat["name"])
 
     try:
+        qs = urlencode({"query": keyword, "display": limit, "sort": "date"})
         resp = httpx.get(
-            _API_URL,
+            f"{_API_URL}?{qs}",
             headers={
                 "X-Naver-Client-Id": _CLIENT_ID,
                 "X-Naver-Client-Secret": _CLIENT_SECRET,
             },
-            params={"query": keyword, "display": limit, "sort": "date"},
             timeout=10,
         )
         resp.raise_for_status()
