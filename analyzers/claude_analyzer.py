@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import time
 
 import httpx
 
@@ -96,17 +97,26 @@ def _responses_json(prompt: str, schema: dict, schema_name: str, max_output_toke
             }
         },
     }
-    response = httpx.post(
-        OPENAI_API_URL,
-        headers=_openai_headers(),
-        json=payload,
-        timeout=120,
-    )
-    response.raise_for_status()
-    text = _extract_output_text(response.json())
-    if not text:
-        raise ValueError("OpenAI 응답에서 텍스트를 찾지 못했습니다.")
-    return _parse_json_object(text)
+
+    # 429 rate limit 자동 재시도 (최대 3회, 지수 백오프)
+    for attempt in range(3):
+        response = httpx.post(
+            OPENAI_API_URL,
+            headers=_openai_headers(),
+            json=payload,
+            timeout=120,
+        )
+        if response.status_code == 429:
+            retry_after = int(response.headers.get("retry-after", 2 ** (attempt + 1) * 10))
+            time.sleep(min(retry_after, 60))
+            continue
+        response.raise_for_status()
+        text = _extract_output_text(response.json())
+        if not text:
+            raise ValueError("OpenAI 응답에서 텍스트를 찾지 못했습니다.")
+        return _parse_json_object(text)
+
+    raise RuntimeError("OpenAI API rate limit: 재시도 3회 모두 실패했습니다.")
 
 
 def _strip_code_fence(text: str) -> str:
