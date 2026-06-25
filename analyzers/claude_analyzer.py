@@ -136,11 +136,26 @@ def _parse_json_object(text: str) -> dict:
 
 def analyze_article(cat_name: str, article: dict) -> dict:
     title = article["title"]
+    snippet = article.get("summary", "").strip()
+    body = article.get("body", "").strip()
+
+    content_section = f"기사 제목: {title}\n"
+    if snippet:
+        content_section += f"발췌 요약: {snippet}\n"
+    if body:
+        content_section += f"기사 본문:\n{body}\n"
+
+    has_body = bool(snippet or body)
+    caution = (
+        "제공된 제목, 발췌, 본문에 근거해서 작성하세요. 본문에 없는 수치나 사실을 만들어내지 마세요."
+        if has_body
+        else "기사 제목만 제공됩니다. 제목에 없는 구체적인 수치, 발언, 원인, 결과는 지어내지 마세요."
+    )
+
     prompt = (
         f"카테고리: {cat_name}\n"
-        f"기사 제목: {title}\n\n"
-        "기사 본문이 아니라 제목만 제공됩니다. 제목에 없는 구체적인 수치, 발언, 원인, 결과는 지어내지 마세요.\n"
-        "다만 독자가 이해하기 쉽도록 제목에서 확인되는 내용, 배경, 왜 중요한지를 충분히 풀어 쓰세요.\n\n"
+        f"{content_section}\n"
+        f"{caution}\n\n"
         "summary는 반드시 4문장 이상, explanation은 반드시 5문장 이상으로 작성하세요."
     )
     obj = _responses_json(prompt, ARTICLE_SCHEMA, "article_analysis", 1200)
@@ -154,33 +169,35 @@ def analyze_article(cat_name: str, article: dict) -> dict:
 def analyze_report(category_data: list[dict]) -> dict:
     payload = []
     for cat in category_data:
-        payload.append(
-            {
-                "id": cat["id"],
-                "name": cat["name"],
-                "articles": [
-                    {"index": i, "title": article["title"]}
-                    for i, article in enumerate(cat["articles"])
-                    if article.get("title")
-                ],
-            }
-        )
+        articles_payload = []
+        for i, article in enumerate(cat["articles"]):
+            if not article.get("title"):
+                continue
+            entry = {"index": i, "title": article["title"]}
+            snippet = (article.get("summary") or "").strip()
+            body = (article.get("body") or "").strip()
+            if snippet:
+                entry["snippet"] = snippet
+            if body:
+                entry["body"] = body[:1200]  # 토큰 절약을 위해 본문 1200자로 제한
+            articles_payload.append(entry)
+        payload.append({"id": cat["id"], "name": cat["name"], "articles": articles_payload})
 
     prompt = (
-        "아래 뉴스 데이터를 분석해서 JSON 객체로 응답하세요.\n\n"
+        "아래 뉴스 데이터를 분석해서 JSON 객체로 응답하세요.\n"
+        "각 기사에는 title(제목), snippet(네이버 발췌), body(기사 본문) 중 확보된 정보가 포함되어 있습니다.\n"
+        "제공된 실제 내용을 최대한 활용하되, 제공되지 않은 수치·발언·원인은 만들어내지 마세요.\n\n"
         f"{json.dumps(payload, ensure_ascii=False)}\n\n"
         "trends에는 아래 섹션만 포함하세요. '오늘의 주요 이슈' 또는 '오늘의 주요 뉴스' 섹션은 만들지 마세요.\n"
         "## 카테고리별 핵심 키워드\n"
         "헤더와 구분선 없이 데이터 행만 있는 마크다운 표로 작성하세요.\n"
         "형식: | 카테고리명 | `키워드1` `키워드2` `키워드3` |\n\n"
         "각 기사 분석 작성 규칙:\n"
-        "- summary는 반드시 4문장 이상으로 작성하세요. 한 문장으로 끝내지 마세요.\n"
-        "- summary에는 제목에서 확인되는 핵심 사건, 관련 주체, 현재 상황, 독자가 알아야 할 맥락을 포함하세요.\n"
-        "- explanation은 반드시 5문장 이상으로 작성하세요. 한 문장으로 끝내지 마세요.\n"
-        "- explanation은 초등학생도 이해할 수 있게 어려운 단어를 풀어 설명하고, 배경과 왜 중요한 뉴스인지 알려주세요.\n"
+        "- summary는 반드시 4문장 이상으로 작성하세요. 제공된 본문·발췌 내용을 바탕으로 핵심 사건, 관련 주체, 현재 상황, 독자가 알아야 할 맥락을 포함하세요.\n"
+        "- explanation은 반드시 5문장 이상으로 작성하세요. 초등학생도 이해할 수 있게 어려운 단어를 풀어 설명하고, 배경과 왜 중요한 뉴스인지 알려주세요.\n"
         "- explanation에는 '쉽게 말해', '이 뉴스가 중요한 이유는'처럼 이해를 돕는 표현을 자연스럽게 포함하세요.\n"
-        "- 제목에 없는 세부 사실, 수치, 원인, 결과는 절대 만들어내지 마세요.\n"
-        "- 정보가 부족하면 '제목만 보면' 또는 '제목상으로는'처럼 한계를 드러내세요.\n"
+        "- 본문이나 발췌에 없는 세부 사실, 수치, 원인, 결과는 절대 만들어내지 마세요.\n"
+        "- 정보가 부족하면 '제목만 보면' 또는 '기사에 따르면'처럼 한계를 드러내세요.\n"
         "- 모든 카테고리와 모든 기사 index를 빠짐없이 포함하세요."
     )
     return _responses_json(prompt, REPORT_SCHEMA, "news_report_analysis", 14000)

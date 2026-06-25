@@ -1,113 +1,168 @@
+import os
+import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import feedparser
 import httpx
-from bs4 import BeautifulSoup
 
 from config import DEFAULT_ARTICLES_PER_CATEGORY, NAVER_CATEGORIES
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Referer": "https://news.naver.com/",
-    "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
+_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
+_API_URL = "https://openapi.naver.com/v1/search/news.json"
+_SCRAPE_TIMEOUT = 6
+_BODY_MAX_CHARS = 1500
+
+_CATEGORY_KEYWORDS = {
+    100: "정치",
+    101: "경제",
+    102: "사회",
+    103: "생활문화",
+    104: "세계",
+    105: "IT과학",
 }
 
-# 해외 클라우드에서 네이버 접근이 막힐 때 사용하는 RSS 폴백
-_RSS_FALLBACK = {
-    100: "https://www.yna.co.kr/rss/politics.xml",
-    101: "https://www.yna.co.kr/rss/economy.xml",
-    102: "https://www.yna.co.kr/rss/society.xml",
-    103: "https://www.yna.co.kr/rss/culture.xml",
-    104: "https://feeds.bbci.co.uk/news/world/rss.xml",
-    105: "https://feeds.bbci.co.uk/news/technology/rss.xml",
-}
+_NAVER_ARTICLE_SELECTORS = [
+    "#dic_area",
+    "#articleBodyContents",
+    "#articeBody",
+    "#newsEndContents",
+    ".go_trans._article_content",
+]
+_GENERIC_ARTICLE_SELECTORS = [
+    "article",
+    '[class*="article-body"]',
+    '[class*="article_body"]',
+    '[id*="article"]',
+    ".news-body",
+]
 
 
-def _category_limit(cat: dict) -> int:
-    return int(cat.get("limit", DEFAULT_ARTICLES_PER_CATEGORY))
+def _strip_html(text: str) -> str:
+    return re.sub(r"<[^>]+>", "", text).strip()
 
 
-def _fetch_rss_fallback(cat: dict) -> list[dict]:
-    url = _RSS_FALLBACK.get(cat["id"])
-    limit = _category_limit(cat)
-    if not url:
-        return []
-
+def _fetch_article_body(naver_link: str, original_link: str) -> str:
+    """네이버 뉴스 또는 원본 URL에서 기사 본문을 추출합니다."""
     try:
-        feed = feedparser.parse(url, request_headers={"User-Agent": "Mozilla/5.0"})
-        articles = []
-        for entry in feed.entries[:limit]:
-            title = entry.get("title", "").strip()
-            link = entry.get("link", "")
-            if title and link:
-                articles.append({"title": title, "link": link, "summary": ""})
-        return articles
-    except Exception:
-        return []
+        from bs4 import BeautifulSoup
+    except ImportError:
+        return ""
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        )
+    }
+
+    # 네이버 뉴스 링크 우선 시도 (스크래핑 안정성이 높음)
+    urls_to_try = []
+    if naver_link and "naver.com" in naver_link:
+        urls_to_try.append(naver_link)
+    if original_link and original_link not in urls_to_try:
+        urls_to_try.append(original_link)
+    if naver_link and naver_link not in urls_to_try:
+        urls_to_try.append(naver_link)
+
+    for url in urls_to_try:
+        try:
+            resp = httpx.get(url, timeout=_SCRAPE_TIMEOUT, follow_redirects=True, headers=headers)
+            if resp.status_code != 200:
+                continue
+            soup = BeautifulSoup(resp.text, "lxml")
+            for tag in soup(["script", "style", "nav", "header", "footer", "aside", "iframe", "figure"]):
+                tag.decompose()
+
+            selectors = _NAVER_ARTICLE_SELECTORS if "naver.com" in url else _GENERIC_ARTICLE_SELECTORS
+            for selector in selectors:
+                elem = soup.select_one(selector)
+                if elem:
+                    text = elem.get_text(separator=" ", strip=True)
+                    text = re.sub(r"\s{2,}", " ", text)
+                    if len(text) > 100:
+                        return text[:_BODY_MAX_CHARS]
+
+            # 범용 fallback
+            text = soup.get_text(separator=" ", strip=True)
+            text = re.sub(r"\s{2,}", " ", text)
+            if len(text) > 200:
+                return text[:_BODY_MAX_CHARS]
+        except Exception:
+            continue
+
+    return ""
 
 
 def _fetch_category(cat: dict) -> dict:
-    limit = _category_limit(cat)
-    articles = []
-    source = "Naver"
+    limit = int(cat.get("limit", DEFAULT_ARTICLES_PER_CATEGORY))
+    keyword = _CATEGORY_KEYWORDS.get(cat["id"], cat["name"])
 
     try:
-        url = f"https://news.naver.com/section/{cat['id']}"
-        resp = httpx.get(url, headers=_HEADERS, follow_redirects=True, timeout=15)
+        resp = httpx.get(
+            _API_URL,
+            headers={
+                "X-Naver-Client-Id": _CLIENT_ID,
+                "X-Naver-Client-Secret": _CLIENT_SECRET,
+            },
+            params={"query": keyword, "display": limit, "sort": "date"},
+            timeout=10,
+        )
         resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "lxml")
-
-        seen_titles = set()
-        selectors = [
-            "a.cluster_head_link",
-            "a.sa_text_title",
-            ".cluster_head a",
-            ".sa_list a.sa_text_title",
-            ".section_article a",
-            "a[class*='title']",
+        items = resp.json().get("items", [])
+        articles = [
+            {
+                "title": _strip_html(item["title"]),
+                "link": item.get("link", ""),
+                "originallink": item.get("originallink", ""),
+                "summary": _strip_html(item.get("description", "")),
+                "body": "",
+            }
+            for item in items
         ]
 
-        for selector in selectors:
-            for tag in soup.select(selector):
-                title = tag.get_text(strip=True)
-                href = tag.get("href", "")
-                if not title or not href or title in seen_titles or len(title) < 6:
-                    continue
-                if not href.startswith("http"):
-                    href = "https://news.naver.com" + href
-                seen_titles.add(title)
-                articles.append({"title": title, "link": href, "summary": ""})
-                if len(articles) >= limit:
-                    break
-            if len(articles) >= limit:
-                break
-    except Exception:
-        pass
+        # 기사 본문 병렬 스크래핑
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            futures = {
+                ex.submit(_fetch_article_body, art["link"], art["originallink"]): i
+                for i, art in enumerate(articles)
+            }
+            for future in as_completed(futures):
+                idx = futures[future]
+                try:
+                    articles[idx]["body"] = future.result()
+                except Exception:
+                    pass
 
-    if not articles:
-        articles = _fetch_rss_fallback(cat)
-        source = "RSS"
-
-    return {
-        "id": cat["id"],
-        "name": cat["name"],
-        "emoji": cat["emoji"],
-        "articles": articles[:limit],
-        "error": None if articles else "기사 수집 실패",
-        "source": source,
-    }
+        return {
+            "id": cat["id"],
+            "name": cat["name"],
+            "emoji": cat["emoji"],
+            "articles": articles,
+            "error": None,
+            "source": "NaverAPI",
+        }
+    except Exception as e:
+        return {
+            "id": cat["id"],
+            "name": cat["name"],
+            "emoji": cat["emoji"],
+            "articles": [],
+            "error": str(e),
+            "source": "NaverAPI",
+        }
 
 
 def collect_all() -> list[dict]:
+    if not _CLIENT_ID or not _CLIENT_SECRET:
+        raise RuntimeError(
+            "NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 환경변수가 없습니다. .env 파일을 확인하세요."
+        )
+
     results = []
     with ThreadPoolExecutor(max_workers=6) as executor:
         futures = {executor.submit(_fetch_category, cat): cat for cat in NAVER_CATEGORIES}
@@ -116,10 +171,7 @@ def collect_all() -> list[dict]:
             if result["error"]:
                 print(f"  [경고] {result['name']}: {result['error']}")
             else:
-                print(
-                    f"  [OK] {result['name']} ({result.get('source', '?')}) "
-                    f"- {len(result['articles'])}건"
-                )
+                print(f"  [OK] {result['name']} (NaverAPI) - {len(result['articles'])}건")
             results.append(result)
 
     order = {cat["id"]: i for i, cat in enumerate(NAVER_CATEGORIES)}
