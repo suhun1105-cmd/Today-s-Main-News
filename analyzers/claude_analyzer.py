@@ -8,7 +8,7 @@ import httpx
 from config import OPENAI_MODEL
 
 
-OPENAI_API_URL = "https://api.openai.com/v1/responses"
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 NEWS_SYSTEM_PROMPT = (
     "당신은 뉴스 해설 전문가입니다. "
     "기사 제목을 바탕으로 핵심 요약과 쉬운 기사 설명을 한국어로 작성합니다. "
@@ -70,36 +70,33 @@ def _openai_headers() -> dict:
     }
 
 
-def _extract_output_text(data: dict) -> str:
-    if data.get("output_text"):
-        return data["output_text"]
-
-    parts = []
-    for item in data.get("output", []):
-        for content in item.get("content", []):
-            if content.get("type") in {"output_text", "text"} and content.get("text"):
-                parts.append(content["text"])
-    return "".join(parts).strip()
+def _extract_text(data: dict) -> str:
+    try:
+        return data["choices"][0]["message"]["content"] or ""
+    except (KeyError, IndexError):
+        return ""
 
 
-def _responses_json(prompt: str, schema: dict, schema_name: str, max_output_tokens: int) -> dict:
+def _chat_json(prompt: str, schema: dict, schema_name: str, max_tokens: int) -> dict:
     payload = {
         "model": os.environ.get("OPENAI_MODEL", OPENAI_MODEL),
-        "instructions": NEWS_SYSTEM_PROMPT,
-        "input": prompt,
-        "max_output_tokens": max_output_tokens,
-        "text": {
-            "format": {
-                "type": "json_schema",
+        "messages": [
+            {"role": "system", "content": NEWS_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
                 "name": schema_name,
                 "strict": True,
                 "schema": schema,
-            }
+            },
         },
+        "max_tokens": max_tokens,
     }
 
-    # 429 rate limit 자동 재시도 (최대 3회, 지수 백오프)
-    for attempt in range(3):
+    # 429 자동 재시도 (최대 5회, 지수 백오프)
+    for attempt in range(5):
         response = httpx.post(
             OPENAI_API_URL,
             headers=_openai_headers(),
@@ -107,16 +104,16 @@ def _responses_json(prompt: str, schema: dict, schema_name: str, max_output_toke
             timeout=120,
         )
         if response.status_code == 429:
-            retry_after = int(response.headers.get("retry-after", 2 ** (attempt + 1) * 10))
-            time.sleep(min(retry_after, 60))
+            wait = int(response.headers.get("retry-after", 2 ** attempt * 5))
+            time.sleep(min(wait, 120))
             continue
         response.raise_for_status()
-        text = _extract_output_text(response.json())
+        text = _extract_text(response.json())
         if not text:
             raise ValueError("OpenAI 응답에서 텍스트를 찾지 못했습니다.")
         return _parse_json_object(text)
 
-    raise RuntimeError("OpenAI API rate limit: 재시도 3회 모두 실패했습니다.")
+    raise RuntimeError("OpenAI API rate limit: 재시도 5회 모두 실패했습니다.")
 
 
 def _strip_code_fence(text: str) -> str:
@@ -168,7 +165,7 @@ def analyze_article(cat_name: str, article: dict) -> dict:
         f"{caution}\n\n"
         "summary는 반드시 4문장 이상, explanation은 반드시 5문장 이상으로 작성하세요."
     )
-    obj = _responses_json(prompt, ARTICLE_SCHEMA, "article_analysis", 1200)
+    obj = _chat_json(prompt, ARTICLE_SCHEMA, "article_analysis", 1200)
     return {
         "title": title,
         "summary": obj.get("summary", ""),
@@ -210,7 +207,7 @@ def analyze_report(category_data: list[dict]) -> dict:
         "- 정보가 부족하면 '제목만 보면' 또는 '기사에 따르면'처럼 한계를 드러내세요.\n"
         "- 모든 카테고리와 모든 기사 index를 빠짐없이 포함하세요."
     )
-    return _responses_json(prompt, REPORT_SCHEMA, "news_report_analysis", 14000)
+    return _chat_json(prompt, REPORT_SCHEMA, "news_report_analysis", 14000)
 
 
 def analyze_trends(category_data: list[dict]) -> str:
@@ -242,5 +239,5 @@ def analyze_trends_only(category_data: list[dict]) -> str:
         "헤더와 구분선 없이 데이터 행만 있는 마크다운 표로 작성하세요.\n"
         "형식: | 카테고리명 | `키워드1` `키워드2` `키워드3` |"
     )
-    result = _responses_json(prompt, _TRENDS_SCHEMA, "trends_only", 600)
+    result = _chat_json(prompt, _TRENDS_SCHEMA, "trends_only", 600)
     return result.get("trends", "")

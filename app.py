@@ -617,20 +617,21 @@ def test_api():
         return jsonify({"ok": False, "error": "OPENAI_API_KEY 환경변수가 없습니다."})
 
     try:
-        from analyzers.claude_analyzer import _extract_output_text, _openai_headers
+        from analyzers.claude_analyzer import _openai_headers
 
         response = httpx.post(
-            "https://api.openai.com/v1/responses",
+            "https://api.openai.com/v1/chat/completions",
             headers=_openai_headers(),
             json={
                 "model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
-                "input": "한국어로 'API 정상'이라고만 답하세요.",
-                "max_output_tokens": 20,
+                "messages": [{"role": "user", "content": "한국어로 'API 정상'이라고만 답하세요."}],
+                "max_tokens": 20,
             },
             timeout=30,
         )
         response.raise_for_status()
-        return jsonify({"ok": True, "response": _extract_output_text(response.json())})
+        text = response.json()["choices"][0]["message"]["content"]
+        return jsonify({"ok": True, "response": text})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)})
 
