@@ -551,8 +551,8 @@ def debug():
             "github_enabled": _github_enabled(),
             "github_repo": GITHUB_REPO,
             "github_branch": GITHUB_BRANCH,
-            "has_openai_api_key": bool(os.environ.get("OPENAI_API_KEY")),
-            "openai_model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+            "has_gemini_api_key": bool(os.environ.get("GEMINI_API_KEY")),
+            "gemini_model": os.environ.get("GEMINI_MODEL", "gemini-2.0-flash"),
             "has_vapid_private_key": bool(os.environ.get("VAPID_PRIVATE_KEY_B64")),
             "has_vapid_public_key": bool(os.environ.get("VAPID_PUBLIC_KEY")),
         }
@@ -613,25 +613,22 @@ def test_analyze():
 
 @app.route("/test-api")
 def test_api():
-    if not os.environ.get("OPENAI_API_KEY"):
-        return jsonify({"ok": False, "error": "OPENAI_API_KEY 환경변수가 없습니다."})
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        return jsonify({"ok": False, "error": "GEMINI_API_KEY 환경변수가 없습니다."})
 
     try:
-        from analyzers.claude_analyzer import _openai_headers
-
+        model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         response = httpx.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=_openai_headers(),
-            json={
-                "model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
-                "messages": [{"role": "user", "content": "한국어로 'API 정상'이라고만 답하세요."}],
-                "max_tokens": 20,
-            },
+            url,
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+            json={"contents": [{"role": "user", "parts": [{"text": "한국어로 'API 정상'이라고만 답하세요."}]}]},
             timeout=30,
         )
         response.raise_for_status()
-        text = response.json()["choices"][0]["message"]["content"]
-        return jsonify({"ok": True, "response": text})
+        text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        return jsonify({"ok": True, "response": text, "model": model})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)})
 
